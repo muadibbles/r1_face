@@ -76,13 +76,18 @@
 
   // ── Accelerometer ────────────────────────────────────────────────────
   // Max pixel offset the tilt can push the eyes
-  const TILT_MAX_X = 18;
-  const TILT_MAX_Y = 12;
-  // Smoothing factor per frame — lower = smoother/slower response (0–1)
-  const TILT_SMOOTH = 0.12;
+  const TILT_MAX_X = 28;
+  const TILT_MAX_Y = 18;
+  // Smoothing — higher = snappier response (0–1)
+  const TILT_SMOOTH = 0.25;
 
   async function initAccelerometer() {
-    if (!window.creationSensors?.accelerometer) return;  // not on R1, skip
+    // creationSensors may be injected after page load — retry for up to 5s
+    let attempts = 0;
+    while (!window.creationSensors?.accelerometer) {
+      if (++attempts > 50) return;  // give up after 5s
+      await new Promise(r => setTimeout(r, 100));
+    }
 
     const available = await window.creationSensors.accelerometer.isAvailable();
     if (!available) return;
@@ -91,10 +96,10 @@
       if (!data) return;
       // tiltX: +1 = right, -1 = left  →  eyes shift right/left
       // tiltY: +1 = forward, -1 = back →  eyes shift down/up
-      const targetX =  data.tiltX * TILT_MAX_X;
-      const targetY =  data.tiltY * TILT_MAX_Y;
+      const targetX = data.tiltX * TILT_MAX_X;
+      const targetY = data.tiltY * TILT_MAX_Y;
 
-      // Smooth toward target each callback (exponential moving average)
+      // Exponential moving average toward target
       state.tiltX += (targetX - state.tiltX) * TILT_SMOOTH;
       state.tiltY += (targetY - state.tiltY) * TILT_SMOOTH;
     }, { frequency: 30 });
