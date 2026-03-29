@@ -179,6 +179,54 @@
 
     .btn.primary:hover { background: #334480; }
 
+    /* ── Emotion buttons ── */
+    .emo-btns {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+
+    .emo-btn {
+      background: #1a1a28;
+      color: #889;
+      border: 1px solid #2a2a3e;
+      border-radius: 6px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: background 0.12s, color 0.12s;
+    }
+
+    .emo-btn:hover  { background: #22223a; color: #bbd; }
+    .emo-btn.active { background: #2a3a6a; border-color: #3a4a8a; color: #aac8ff; }
+
+    /* ── Emotion sliders sub-grid ── */
+    #emotion-params {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 20px;
+    }
+
+    #emotion-params .row { margin-bottom: 10px; }
+
+    .section-divider {
+      grid-column: 1 / -1;
+      border: none;
+      border-top: 1px solid #1e1e2e;
+      margin: 10px 0 14px;
+    }
+
+    .sub-label {
+      grid-column: 1 / -1;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #445;
+      margin-bottom: 8px;
+    }
+
     .toggle-row {
       display: flex;
       align-items: center;
@@ -256,6 +304,15 @@
     <h3>Colors</h3>
   </div>
 
+  <!-- Emotions panel — full width -->
+  <div class="panel" id="panel-emotions" style="grid-column: 1 / -1;">
+    <h3>Emotions</h3>
+
+    <div class="emo-btns" id="emo-btns"></div>
+
+    <div id="emotion-params"></div>
+  </div>
+
 </div>
 
 <!-- ── Export ────────────────────────────────────────────────────────── -->
@@ -271,7 +328,7 @@
 <script>
   window.faceConfig = {};  // face.js will fill in all defaults
 </script>
-<script src="face.js?v=0.025"></script>
+<script src="face.js?v=0.026"></script>
 <script>
 
 // ── Slider schema ─────────────────────────────────────────────────────
@@ -305,8 +362,9 @@ const SCHEMA = [
 ];
 
 const COLOR_SCHEMA = [
-  { key: 'bgColor',  label: 'Background', panel: 'colors' },
-  { key: 'eyeColor', label: 'Eye',        panel: 'colors' },
+  { key: 'bgColor',   label: 'Background', panel: 'colors' },
+  { key: 'eyeColor',  label: 'Eye',        panel: 'colors' },
+  { key: 'browColor', label: 'Brow',       panel: 'colors' },
 ];
 
 // ── Build sliders ─────────────────────────────────────────────────────
@@ -407,6 +465,162 @@ COLOR_SCHEMA.forEach(({ key, label, panel }) => {
   row.appendChild(hex);
   wrap.appendChild(row);
 });
+
+// ── Emotions panel ───────────────────────────────────────────────────
+const EMOTION_PARAM_SCHEMA = [
+  // Eye shape
+  { key: 'eyeRyScale',    label: 'Eye height',   min: 0.3,  max: 1.8,  step: 0.05, fmt: v => Math.round(v*100)+'%' },
+  { key: 'eyeYShift',     label: 'Eye Y shift',  min: -20,  max: 20,   step: 1,    fmt: v => v+'px' },
+  { key: 'lidRest',       label: 'Lid rest',     min: 0,    max: 0.6,  step: 0.01, fmt: v => Math.round(v*100)+'%' },
+  // Brow
+  { key: 'browYOffset',   label: 'Brow Y',       min: -44,  max: -4,   step: 1,    fmt: v => v+'px' },
+  { key: 'browCurve',     label: 'Brow curve',   min: -6,   max: 16,   step: 0.5,  fmt: v => v+'px' },
+  { key: 'browAngle',     label: 'Brow angle',   min: -20,  max: 20,   step: 0.5,  fmt: v => v+'°' },
+  { key: 'browXSpan',     label: 'Brow width',   min: 5,    max: 44,   step: 1,    fmt: v => v+'px' },
+  { key: 'browThickness', label: 'Brow thick',   min: 0.5,  max: 8,    step: 0.25, fmt: v => v+'px' },
+  // Timing
+  { key: 'blinkRateMult', label: 'Blink rate',   min: 0.1,  max: 3,    step: 0.1,  fmt: v => v.toFixed(1)+'×' },
+];
+
+// Transition sliders appended after the emotion param sliders
+const TRANSITION_SCHEMA = [
+  { key: 'transitionDuration', label: 'Duration', min: 50, max: 2000, step: 50, fmt: v => v+'ms' },
+];
+
+let selectedEmotion = 'neutral';
+const emoSliderRefs = {};  // key → { input, display } for updating on emotion switch
+
+function buildEmotionPanel() {
+  const btnWrap = document.getElementById('emo-btns');
+  const paramsWrap = document.getElementById('emotion-params');
+
+  // Emotion buttons
+  window.FACE_EMOTION_NAMES.forEach(name => {
+    const btn = document.createElement('button');
+    btn.className   = 'emo-btn' + (name === selectedEmotion ? ' active' : '');
+    btn.textContent = name.charAt(0).toUpperCase() + name.slice(1);
+    btn.id          = 'emo-btn-' + name;
+    btn.addEventListener('click', () => switchEmotion(name));
+    btnWrap.appendChild(btn);
+  });
+
+  // Section: Eye & Lid
+  addSubLabel(paramsWrap, 'Eye & Lid');
+  EMOTION_PARAM_SCHEMA.slice(0, 3).forEach(s => addEmoSlider(paramsWrap, s));
+
+  // Section: Brow
+  addSubLabel(paramsWrap, 'Brow');
+  EMOTION_PARAM_SCHEMA.slice(3, 8).forEach(s => addEmoSlider(paramsWrap, s));
+
+  // Section: Timing + Transition
+  addSubLabel(paramsWrap, 'Timing & Transition');
+  addEmoSlider(paramsWrap, EMOTION_PARAM_SCHEMA[8]);  // blinkRateMult
+  TRANSITION_SCHEMA.forEach(s => addTransitionSlider(paramsWrap, s));
+
+  // Transition easing dropdown
+  addTransitionSelect(paramsWrap);
+}
+
+function addSubLabel(wrap, text) {
+  const hr = document.createElement('hr');
+  hr.className = 'section-divider';
+  wrap.appendChild(hr);
+  const lbl = document.createElement('div');
+  lbl.className   = 'sub-label';
+  lbl.textContent = text;
+  wrap.appendChild(lbl);
+}
+
+function addEmoSlider(wrap, { key, label, min, max, step, fmt }) {
+  const preset = window.faceConfig.emotions[selectedEmotion];
+  const val    = preset[key];
+
+  const row = document.createElement('div');
+  row.className = 'row';
+
+  const lbl = document.createElement('label');
+  lbl.textContent = label;
+
+  const input = document.createElement('input');
+  input.type  = 'range';
+  input.min   = min; input.max = max; input.step = step;
+  input.value = val;
+
+  const display = document.createElement('span');
+  display.className   = 'val';
+  display.textContent = fmt(val);
+
+  input.addEventListener('input', () => {
+    const n = parseFloat(input.value);
+    window.faceConfig.emotions[selectedEmotion][key] = n;
+    display.textContent = fmt(n);
+    // If this is the active emotion, re-apply so changes show immediately
+    if (window.__faceDebug?.getEmotion() === selectedEmotion) {
+      window.__faceDebug.setEmotion(selectedEmotion);
+    }
+  });
+
+  emoSliderRefs[key] = { input, display, fmt };
+  row.appendChild(lbl); row.appendChild(input); row.appendChild(display);
+  wrap.appendChild(row);
+}
+
+function addTransitionSlider(wrap, { key, label, min, max, step, fmt }) {
+  const val = window.faceConfig[key];
+  const row = document.createElement('div');
+  row.className = 'row';
+  const lbl = document.createElement('label');
+  lbl.textContent = label;
+  const input = document.createElement('input');
+  input.type = 'range'; input.min = min; input.max = max; input.step = step; input.value = val;
+  const display = document.createElement('span');
+  display.className = 'val'; display.textContent = fmt(val);
+  input.addEventListener('input', () => {
+    window.faceConfig[key] = parseFloat(input.value);
+    display.textContent = fmt(parseFloat(input.value));
+  });
+  row.appendChild(lbl); row.appendChild(input); row.appendChild(display);
+  wrap.appendChild(row);
+}
+
+function addTransitionSelect(wrap) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const lbl = document.createElement('label');
+  lbl.textContent = 'Transition curve';
+  const select = document.createElement('select');
+  Object.keys(window.FACE_EASINGS).forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name; opt.textContent = name;
+    if (name === window.faceConfig.transitionEasing) opt.selected = true;
+    select.appendChild(opt);
+  });
+  select.addEventListener('change', () => { window.faceConfig.transitionEasing = select.value; });
+  row.appendChild(lbl); row.appendChild(select);
+  wrap.appendChild(row);
+}
+
+function switchEmotion(name) {
+  // Update button states
+  document.querySelectorAll('.emo-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('emo-btn-' + name)?.classList.add('active');
+
+  selectedEmotion = name;
+
+  // Update all emotion sliders to show this emotion's values
+  const preset = window.faceConfig.emotions[name];
+  EMOTION_PARAM_SCHEMA.forEach(({ key, fmt }) => {
+    const ref = emoSliderRefs[key];
+    if (!ref) return;
+    ref.input.value     = preset[key];
+    ref.display.textContent = ref.fmt(preset[key]);
+  });
+
+  // Animate to the emotion
+  window.__faceDebug?.setEmotion(name);
+}
+
+buildEmotionPanel();
 
 // ── Manual controls ───────────────────────────────────────────────────
 // These reach into face.js's closure via the shared faceConfig object.
