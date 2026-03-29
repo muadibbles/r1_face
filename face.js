@@ -44,13 +44,18 @@
     blinkHold:  0,
     blinkType:  null,     // active blink profile
 
-    // Look-around — both eyes shift together by an X offset
-    lookX: 0,            // current offset applied to both eye cx positions
-    lookTargetX: 0,      // destination offset
+    // Look-around — idle wander offset
+    lookX: 0,            // current offset applied to both eye positions
+    lookY: 0,
+    lookTargetX: 0,
     lookSpeed: 0,        // px/ms
     lookPhase: 'idle',   // 'idle' | 'moving' | 'hold'
     lookWait:  randBetween(1500, 4000),
     lookHold:  0,
+
+    // Tilt — accelerometer-driven offset, blended on top of look
+    tiltX: 0,            // smoothed tilt contribution (px)
+    tiltY: 0,
   };
 
   // ── Helpers ──────────────────────────────────────────────────────────
@@ -68,6 +73,34 @@
     state.lookTargetX = target;
     state.lookSpeed   = randBetween(0.2, 0.9);  // px/ms — snappy vs lazy
   }
+
+  // ── Accelerometer ────────────────────────────────────────────────────
+  // Max pixel offset the tilt can push the eyes
+  const TILT_MAX_X = 18;
+  const TILT_MAX_Y = 12;
+  // Smoothing factor per frame — lower = smoother/slower response (0–1)
+  const TILT_SMOOTH = 0.12;
+
+  async function initAccelerometer() {
+    if (!window.creationSensors?.accelerometer) return;  // not on R1, skip
+
+    const available = await window.creationSensors.accelerometer.isAvailable();
+    if (!available) return;
+
+    window.creationSensors.accelerometer.start((data) => {
+      if (!data) return;
+      // tiltX: +1 = right, -1 = left  →  eyes shift right/left
+      // tiltY: +1 = forward, -1 = back →  eyes shift down/up
+      const targetX =  data.tiltX * TILT_MAX_X;
+      const targetY =  data.tiltY * TILT_MAX_Y;
+
+      // Smooth toward target each callback (exponential moving average)
+      state.tiltX += (targetX - state.tiltX) * TILT_SMOOTH;
+      state.tiltY += (targetY - state.tiltY) * TILT_SMOOTH;
+    }, { frequency: 30 });
+  }
+
+  initAccelerometer();
 
   // ── Update ───────────────────────────────────────────────────────────
   function update(dt) {
@@ -124,6 +157,7 @@
         } else {
           state.lookX += Math.sign(dx) * step;
         }
+        // lookY stays 0 for idle wander — tilt handles vertical
         break;
       }
 
@@ -148,7 +182,8 @@
     const blink = state.blink;
 
     ctx.save();
-    ctx.translate(cx + state.lookX, cy);  // shift both eyes together for look
+    // Combine idle look-around with accelerometer tilt
+    ctx.translate(cx + state.lookX + state.tiltX, cy + state.lookY + state.tiltY);
 
     // Clip to eye shape so eyelid edges follow the ellipse
     ctx.beginPath();
@@ -213,6 +248,7 @@
     const lines = [
       `blink: ${state.blinkPhase}`,
       `look:  ${state.lookPhase}`,
+      `tilt:  ${state.tiltX.toFixed(1)}, ${state.tiltY.toFixed(1)}`,
     ];
 
     const lh = 14;  // line height
