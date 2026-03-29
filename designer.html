@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>R1 Face Designer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #111118;
+      color: #bbc;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+      min-height: 100vh;
+    }
+
+    /* ── Preview bar ── */
+    #preview {
+      background: #0a0a10;
+      border-bottom: 1px solid #1e1e2e;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 24px;
+      gap: 32px;
+    }
+
+    #preview canvas {
+      /* Show at 2× for easier viewing — actual R1 size is 240×282 */
+      width: 240px;
+      height: 282px;
+      image-rendering: pixelated;
+      border: 1px solid #1e1e2e;
+      border-radius: 4px;
+    }
+
+    #preview-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    /* ── Controls grid ── */
+    #controls {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 24px 20px 40px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 600px) {
+      #controls { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: #15151e;
+      border: 1px solid #1e1e2e;
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .panel h3 {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #556;
+      margin-bottom: 14px;
+    }
+
+    /* ── Slider row ── */
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 11px;
+    }
+
+    .row:last-child { margin-bottom: 0; }
+
+    .row label {
+      width: 82px;
+      flex-shrink: 0;
+      color: #889;
+      white-space: nowrap;
+    }
+
+    .row input[type="range"] {
+      flex: 1;
+      height: 4px;
+      cursor: pointer;
+      accent-color: #5577ff;
+    }
+
+    .row .val {
+      width: 54px;
+      flex-shrink: 0;
+      text-align: right;
+      color: #dde;
+      font-variant-numeric: tabular-nums;
+      font-size: 12px;
+    }
+
+    /* ── Color row ── */
+    .color-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 11px;
+    }
+
+    .color-row label {
+      width: 82px;
+      flex-shrink: 0;
+      color: #889;
+    }
+
+    .color-row input[type="color"] {
+      width: 48px;
+      height: 28px;
+      border: 1px solid #333;
+      border-radius: 5px;
+      cursor: pointer;
+      background: none;
+      padding: 2px;
+    }
+
+    .color-row .hex {
+      color: #667;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      background: #22223a;
+      color: #aac;
+      border: 1px solid #2e2e4a;
+      border-radius: 6px;
+      padding: 7px 14px;
+      cursor: pointer;
+      font-size: 12px;
+      white-space: nowrap;
+      transition: background 0.15s;
+    }
+
+    .btn:hover { background: #2a2a4a; color: #dde; }
+
+    .btn.primary {
+      background: #2a3a6a;
+      border-color: #3a4a8a;
+      color: #aac8ff;
+    }
+
+    .btn.primary:hover { background: #334480; }
+
+    /* ── Export output ── */
+    #export-wrap {
+      max-width: 860px;
+      margin: 0 auto 40px;
+      padding: 0 20px;
+      display: none;
+    }
+
+    #export-wrap.visible { display: block; }
+
+    #export-out {
+      background: #0a0a10;
+      border: 1px solid #1e1e2e;
+      border-radius: 8px;
+      padding: 14px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #7af;
+      white-space: pre;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Face preview ─────────────────────────────────────────────────── -->
+<div id="preview">
+  <canvas id="face" width="240" height="282"></canvas>
+  <div id="preview-actions">
+    <button class="btn" onclick="triggerBlink()">Blink now</button>
+    <button class="btn" onclick="lookLeft()">Look left</button>
+    <button class="btn" onclick="lookRight()">Look right</button>
+    <button class="btn" onclick="lookCenter()">Look center</button>
+  </div>
+</div>
+
+<!-- ── Slider panels ─────────────────────────────────────────────────── -->
+<div id="controls">
+
+  <div class="panel" id="panel-eyes">
+    <h3>Eyes</h3>
+  </div>
+
+  <div class="panel" id="panel-blink">
+    <h3>Blink</h3>
+  </div>
+
+  <div class="panel" id="panel-look">
+    <h3>Look</h3>
+  </div>
+
+  <div class="panel" id="panel-tilt">
+    <h3>Tilt (accelerometer)</h3>
+  </div>
+
+  <div class="panel" id="panel-colors">
+    <h3>Colors</h3>
+  </div>
+
+</div>
+
+<!-- ── Export ────────────────────────────────────────────────────────── -->
+<div style="text-align:center; margin-bottom: 32px;">
+  <button class="btn primary" onclick="exportConfig()">Export config JSON</button>
+</div>
+
+<div id="export-wrap">
+  <div id="export-out"></div>
+</div>
+
+<!-- face.js must load after faceConfig is set -->
+<script>
+  window.faceConfig = {};  // face.js will fill in all defaults
+</script>
+<script src="face.js?v=0.024"></script>
+<script>
+
+// ── Slider schema ─────────────────────────────────────────────────────
+// { key, label, panel, min, max, step, fmt }
+
+const SCHEMA = [
+  // Eyes
+  { key: 'eyeRx',      label: 'Width',     panel: 'eyes',   min: 5,    max: 80,    step: 1,    fmt: v => v + 'px' },
+  { key: 'eyeRy',      label: 'Height',    panel: 'eyes',   min: 5,    max: 80,    step: 1,    fmt: v => v + 'px' },
+  { key: 'eyeSpacing', label: 'Spacing',   panel: 'eyes',   min: 10,   max: 110,   step: 1,    fmt: v => v + 'px' },
+  { key: 'eyeOffsetY', label: 'Y Offset',  panel: 'eyes',   min: -80,  max: 80,    step: 1,    fmt: v => v + 'px' },
+  { key: 'eyeTilt',    label: 'Tilt',      panel: 'eyes',   min: 0,    max: 45,    step: 0.5,  fmt: v => v + '°'  },
+
+  // Blink
+  { key: 'blinkWaitMin', label: 'Wait min', panel: 'blink', min: 200,  max: 8000,  step: 100,  fmt: v => v + 'ms' },
+  { key: 'blinkWaitMax', label: 'Wait max', panel: 'blink', min: 500,  max: 12000, step: 100,  fmt: v => v + 'ms' },
+
+  // Look
+  { key: 'lookMax',      label: 'Range',     panel: 'look', min: 0,    max: 80,    step: 1,    fmt: v => v + 'px'  },
+  { key: 'lookSpeedMin', label: 'Speed min', panel: 'look', min: 0.05, max: 2,     step: 0.05, fmt: v => v.toFixed(2) + ' px/ms' },
+  { key: 'lookSpeedMax', label: 'Speed max', panel: 'look', min: 0.1,  max: 3,     step: 0.05, fmt: v => v.toFixed(2) + ' px/ms' },
+  { key: 'lookWaitMin',  label: 'Wait min',  panel: 'look', min: 100,  max: 5000,  step: 100,  fmt: v => v + 'ms'  },
+  { key: 'lookWaitMax',  label: 'Wait max',  panel: 'look', min: 500,  max: 8000,  step: 100,  fmt: v => v + 'ms'  },
+  { key: 'lookHoldMin',  label: 'Hold min',  panel: 'look', min: 50,   max: 3000,  step: 50,   fmt: v => v + 'ms'  },
+  { key: 'lookHoldMax',  label: 'Hold max',  panel: 'look', min: 100,  max: 6000,  step: 100,  fmt: v => v + 'ms'  },
+
+  // Tilt
+  { key: 'tiltMaxX',   label: 'Max X',     panel: 'tilt', min: 0, max: 80,  step: 1,    fmt: v => v + 'px'     },
+  { key: 'tiltMaxY',   label: 'Max Y',     panel: 'tilt', min: 0, max: 60,  step: 1,    fmt: v => v + 'px'     },
+  { key: 'tiltSmooth', label: 'Smoothing', panel: 'tilt', min: 0.01, max: 1, step: 0.01, fmt: v => v.toFixed(2) },
+];
+
+const COLOR_SCHEMA = [
+  { key: 'bgColor',  label: 'Background', panel: 'colors' },
+  { key: 'eyeColor', label: 'Eye',        panel: 'colors' },
+];
+
+// ── Build sliders ─────────────────────────────────────────────────────
+SCHEMA.forEach(({ key, label, panel, min, max, step, fmt }) => {
+  const val  = window.faceConfig[key];
+  const wrap = document.getElementById('panel-' + panel);
+
+  const row   = document.createElement('div');
+  row.className = 'row';
+
+  const lbl   = document.createElement('label');
+  lbl.textContent = label;
+
+  const input = document.createElement('input');
+  input.type  = 'range';
+  input.min   = min;
+  input.max   = max;
+  input.step  = step;
+  input.value = val;
+
+  const display = document.createElement('span');
+  display.className = 'val';
+  display.textContent = fmt(val);
+
+  input.addEventListener('input', () => {
+    const n = parseFloat(input.value);
+    window.faceConfig[key] = n;
+    display.textContent = fmt(n);
+  });
+
+  row.appendChild(lbl);
+  row.appendChild(input);
+  row.appendChild(display);
+  wrap.appendChild(row);
+});
+
+// ── Build color pickers ───────────────────────────────────────────────
+COLOR_SCHEMA.forEach(({ key, label, panel }) => {
+  const val  = window.faceConfig[key];
+  const wrap = document.getElementById('panel-' + panel);
+
+  const row   = document.createElement('div');
+  row.className = 'color-row';
+
+  const lbl   = document.createElement('label');
+  lbl.textContent = label;
+
+  const input = document.createElement('input');
+  input.type  = 'color';
+  input.value = val;
+
+  const hex = document.createElement('span');
+  hex.className = 'hex';
+  hex.textContent = val;
+
+  input.addEventListener('input', () => {
+    window.faceConfig[key] = input.value;
+    hex.textContent = input.value;
+  });
+
+  row.appendChild(lbl);
+  row.appendChild(input);
+  row.appendChild(hex);
+  wrap.appendChild(row);
+});
+
+// ── Manual controls ───────────────────────────────────────────────────
+// These reach into face.js's closure via the shared faceConfig object.
+// We manipulate the canvas's internal state by injecting a one-shot override.
+
+function triggerBlink() {
+  // Force a blink by setting blinkPhase — face.js reads cfg but owns state.
+  // We can't reach state directly, so just call a helper if exposed.
+  if (window.__faceDebug) window.__faceDebug.blink();
+}
+
+function lookLeft()   { if (window.__faceDebug) window.__faceDebug.look(-window.faceConfig.lookMax); }
+function lookRight()  { if (window.__faceDebug) window.__faceDebug.look( window.faceConfig.lookMax); }
+function lookCenter() { if (window.__faceDebug) window.__faceDebug.look(0); }
+
+// ── Export ────────────────────────────────────────────────────────────
+function exportConfig() {
+  const out = document.getElementById('export-out');
+  const wrap = document.getElementById('export-wrap');
+  out.textContent = JSON.stringify(window.faceConfig, null, 2);
+  wrap.classList.add('visible');
+  out.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+</script>
+</body>
+</html>
