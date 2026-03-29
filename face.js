@@ -1,6 +1,6 @@
 // face.js — R1 Face Character
 // Designed for 240x282 display (Rabbit R1 Creations).
-// v0.022
+// v0.023
 
 (function () {
   const canvas = document.getElementById('face');
@@ -12,8 +12,8 @@
   const CY = H / 2 - 3;
 
   const EYES = [
-    { cx: CX - 40, cy: CY },  // left
-    { cx: CX + 40, cy: CY },  // right
+    { cx: CX - 40, cy: CY, tilt: -10 * Math.PI / 180 },  // left  — top leans left
+    { cx: CX + 40, cy: CY, tilt:  10 * Math.PI / 180 },  // right — top leans right
   ];
 
   // Eye geometry — slightly taller than wide
@@ -183,40 +183,34 @@
   }
 
   function drawEye(eye) {
-    const { cx, cy } = eye;
+    const { cx, cy, tilt } = eye;
     const blink = state.blink;
 
-    ctx.save();
-    // Combine idle look-around with accelerometer tilt
-    ctx.translate(cx + state.lookX + state.tiltX, cy + state.lookY + state.tiltY);
+    // Vertical radius shrinks to 0 as blink goes 0→1
+    const ry = EYE_RY * (1 - blink);
 
-    // Clip to eye shape so eyelid edges follow the ellipse
+    ctx.save();
+    // Position: idle look + accelerometer tilt
+    ctx.translate(cx + state.lookX + state.tiltX, cy + state.lookY + state.tiltY);
+    // Eye tilt — top leans away from centerline
+    ctx.rotate(tilt);
+
+    // Clip to (possibly squished) eye shape
     ctx.beginPath();
-    ctx.ellipse(0, 0, EYE_RX, EYE_RY, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, EYE_RX, Math.max(ry, 0.5), 0, 0, Math.PI * 2);
     ctx.clip();
 
     // White fill
     ctx.fillStyle = C.eye;
     ctx.beginPath();
-    ctx.ellipse(0, 0, EYE_RX, EYE_RY, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, EYE_RX, Math.max(ry, 0.5), 0, 0, Math.PI * 2);
     ctx.fill();
-
-    // Eyelids
-    if (blink > 0) {
-      const upperH = blink * (EYE_RY * 2.15);
-      ctx.fillStyle = C.lid;
-      ctx.fillRect(-EYE_RX, -EYE_RY - 1, EYE_RX * 2, upperH);
-
-      const lowerH = blink * (EYE_RY * 0.40);
-      ctx.fillStyle = C.lid;
-      ctx.fillRect(-EYE_RX, EYE_RY - lowerH, EYE_RX * 2, lowerH + 2);
-    }
 
     ctx.restore();
   }
 
   // ── Version overlay ──────────────────────────────────────────────────
-  const VERSION = 'v0.022';
+  const VERSION = 'v0.023';
 
   function drawVersion() {
     ctx.save();
