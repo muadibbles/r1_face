@@ -5,20 +5,20 @@
 (function () {
   const canvas = document.getElementById('face');
   const ctx    = canvas.getContext('2d');
-  const W = 640, H = 480;
+  const W = 240, H = 282;
 
   // ── Layout ──────────────────────────────────────────────────────────
   const CX = W / 2;
-  const CY = H / 2 - 8;
+  const CY = H / 2 - 3;
 
   const EYES = [
-    { cx: CX - 108, cy: CY },  // left
-    { cx: CX + 108, cy: CY },  // right
+    { cx: CX - 40, cy: CY },  // left
+    { cx: CX + 40, cy: CY },  // right
   ];
 
-  // Eye geometry
-  const EYE_RX = 68;  // eye horizontal radius
-  const EYE_RY = 60;  // eye vertical radius
+  // Eye geometry — slightly taller than wide
+  const EYE_RX = 24;  // eye horizontal radius
+  const EYE_RY = 27;  // eye vertical radius (taller)
 
   // ── Colors ──────────────────────────────────────────────────────────
   const C = {
@@ -27,37 +27,66 @@
     lid: '#0d0d14',
   };
 
+  // ── Blink types ─────────────────────────────────────────────────────
+  // Three distinct profiles: quick snap, normal, slow lazy
+  const BLINK_TYPES = [
+    { close: 45,  hold: 30,  open: 70  },   // quick snap
+    { close: 72,  hold: 52,  open: 115 },   // normal
+    { close: 130, hold: 100, open: 180 },   // slow lazy
+  ];
+
   // ── State ────────────────────────────────────────────────────────────
   const state = {
     // Blink  — 0 = fully open, 1 = fully closed
     blink: 0,
     blinkPhase: 'idle',   // 'idle' | 'closing' | 'hold' | 'opening'
-    blinkWait: randBetween(2500, 5000),
-    blinkHold: 0,
+    blinkWait:  randBetween(2500, 5000),
+    blinkHold:  0,
+    blinkType:  null,     // active blink profile
+
+    // Look-around — both eyes shift together by an X offset
+    lookX: 0,            // current offset applied to both eye cx positions
+    lookTargetX: 0,      // destination offset
+    lookSpeed: 0,        // px/ms
+    lookPhase: 'idle',   // 'idle' | 'moving' | 'hold'
+    lookWait:  randBetween(1500, 4000),
+    lookHold:  0,
   };
 
   // ── Helpers ──────────────────────────────────────────────────────────
   function randBetween(lo, hi) { return lo + Math.random() * (hi - lo); }
+  function randInt(lo, hi)     { return Math.floor(randBetween(lo, hi + 1)); }
+
+  // Possible look positions: center, slight left/right, far left/right
+  const LOOK_POSITIONS = [0, 0, 0, -10, 10, -20, 20];  // weighted toward center
+
+  function newLookTarget() {
+    // Pick a target that's different from the current one
+    let target;
+    do { target = LOOK_POSITIONS[randInt(0, LOOK_POSITIONS.length - 1)]; }
+    while (target === state.lookTargetX);
+    state.lookTargetX = target;
+    state.lookSpeed   = randBetween(0.2, 0.9);  // px/ms — snappy vs lazy
+  }
 
   // ── Update ───────────────────────────────────────────────────────────
   function update(dt) {
 
-    // Blink state machine
-    const CLOSE_MS = 72;
-    const OPEN_MS  = 115;
-    const HOLD_MS  = 52;
-
+    // ── Blink state machine ──────────────────────────────────────────
     switch (state.blinkPhase) {
       case 'idle':
         state.blinkWait -= dt;
-        if (state.blinkWait <= 0) state.blinkPhase = 'closing';
+        if (state.blinkWait <= 0) {
+          state.blinkType  = BLINK_TYPES[randInt(0, BLINK_TYPES.length - 1)];
+          state.blinkPhase = 'closing';
+        }
         break;
 
       case 'closing':
-        state.blink = Math.min(1, state.blink + dt / CLOSE_MS);
+        state.blink = Math.min(1, state.blink + dt / state.blinkType.close);
         if (state.blink >= 1) {
           state.blinkPhase = 'hold';
-          state.blinkHold  = HOLD_MS;
+          state.blinkHold  = state.blinkType.hold;
         }
         break;
 
@@ -67,10 +96,42 @@
         break;
 
       case 'opening':
-        state.blink = Math.max(0, state.blink - dt / OPEN_MS);
+        state.blink = Math.max(0, state.blink - dt / state.blinkType.open);
         if (state.blink <= 0) {
           state.blinkPhase = 'idle';
           state.blinkWait  = randBetween(2500, 5500);
+        }
+        break;
+    }
+
+    // ── Look-around state machine ────────────────────────────────────
+    switch (state.lookPhase) {
+      case 'idle':
+        state.lookWait -= dt;
+        if (state.lookWait <= 0) {
+          newLookTarget();
+          state.lookPhase = 'moving';
+        }
+        break;
+
+      case 'moving': {
+        const dx   = state.lookTargetX - state.lookX;
+        const step = state.lookSpeed * dt;
+        if (Math.abs(dx) <= step) {
+          state.lookX     = state.lookTargetX;
+          state.lookPhase = 'hold';
+          state.lookHold  = randBetween(400, 2200);
+        } else {
+          state.lookX += Math.sign(dx) * step;
+        }
+        break;
+      }
+
+      case 'hold':
+        state.lookHold -= dt;
+        if (state.lookHold <= 0) {
+          state.lookPhase = 'idle';
+          state.lookWait  = randBetween(800, 3000);
         }
         break;
     }
@@ -87,7 +148,7 @@
     const blink = state.blink;
 
     ctx.save();
-    ctx.translate(cx, cy);
+    ctx.translate(cx + state.lookX, cy);  // shift both eyes together for look
 
     // Clip to eye shape so eyelid edges follow the ellipse
     ctx.beginPath();
@@ -114,6 +175,64 @@
     ctx.restore();
   }
 
+  // ── Debug overlay ────────────────────────────────────────────────────
+  let debugOpen = false;
+
+  // Hit region for the toggle (x button or state text block)
+  const DEBUG_X = 4, DEBUG_Y = H - 16, DEBUG_W = 10, DEBUG_H = 10;
+
+  canvas.addEventListener('click', function (e) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    if (!debugOpen) {
+      // Check if click is on the small x
+      if (mx >= DEBUG_X && mx <= DEBUG_X + DEBUG_W &&
+          my >= DEBUG_Y && my <= DEBUG_Y + DEBUG_H) {
+        debugOpen = true;
+      }
+    } else {
+      // Any click while open closes it
+      debugOpen = false;
+    }
+  });
+
+  function drawDebug() {
+    if (!debugOpen) {
+      // Draw small dark x in lower left
+      ctx.save();
+      ctx.font = '12px monospace';
+      ctx.fillStyle = '#333355';
+      ctx.fillText('×', DEBUG_X, DEBUG_Y + DEBUG_H - 2);
+      ctx.restore();
+      return;
+    }
+
+    // Current phase only
+    const lines = [
+      `blink: ${state.blinkPhase}`,
+      `look:  ${state.lookPhase}`,
+    ];
+
+    const lh = 14;  // line height
+    const pad = 6;
+    const bw = 180, bh = lines.length * lh + pad * 2;
+    const bx = 8, by = H - bh - 8;
+
+    // Background panel
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(bx, by, bw, bh);
+
+    ctx.font = '11px monospace';
+    ctx.fillStyle = '#445566';
+    lines.forEach((line, i) => {
+      ctx.fillText(line, bx + pad, by + pad + (i + 1) * lh - 2);
+    });
+    ctx.restore();
+  }
+
   // ── Main loop ────────────────────────────────────────────────────────
   let lastTime = performance.now();
 
@@ -124,6 +243,7 @@
     update(dt);
     drawBackground();
     EYES.forEach(drawEye);
+    drawDebug();
 
     requestAnimationFrame(loop);
   }
