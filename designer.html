@@ -25,14 +25,24 @@
       gap: 32px;
     }
 
-    #preview canvas {
-      /* Show at 2× for easier viewing — actual R1 size is 240×282 */
+    #canvas-wrap {
+      position: relative;
+      border: 1px solid #1e1e2e;
+      border-radius: 4px;
+      /* displayed at 2× */
+      width: 240px;
+      height: 282px;
+    }
+
+    #canvas-wrap canvas {
+      position: absolute;
+      top: 0; left: 0;
       width: 240px;
       height: 282px;
       image-rendering: pixelated;
-      border: 1px solid #1e1e2e;
-      border-radius: 4px;
     }
+
+    #grid-overlay { pointer-events: none; }
 
     #preview-actions {
       display: flex;
@@ -156,6 +166,17 @@
 
     .btn.primary:hover { background: #334480; }
 
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #889;
+      cursor: pointer;
+      padding: 4px 0;
+    }
+
+    .toggle-row input { cursor: pointer; accent-color: #5577ff; }
+
     /* ── Export output ── */
     #export-wrap {
       max-width: 860px;
@@ -183,12 +204,19 @@
 
 <!-- ── Face preview ─────────────────────────────────────────────────── -->
 <div id="preview">
-  <canvas id="face" width="240" height="282"></canvas>
+  <div id="canvas-wrap">
+    <canvas id="face" width="240" height="282"></canvas>
+    <canvas id="grid-overlay" width="240" height="282"></canvas>
+  </div>
   <div id="preview-actions">
     <button class="btn" onclick="triggerBlink()">Blink now</button>
     <button class="btn" onclick="lookLeft()">Look left</button>
     <button class="btn" onclick="lookRight()">Look right</button>
     <button class="btn" onclick="lookCenter()">Look center</button>
+    <label class="toggle-row">
+      <input type="checkbox" id="grid-toggle" onchange="setGrid(this.checked)">
+      <span>Show grid</span>
+    </label>
   </div>
 </div>
 
@@ -345,6 +373,51 @@ function triggerBlink() {
 function lookLeft()   { if (window.__faceDebug) window.__faceDebug.look(-window.faceConfig.lookMax); }
 function lookRight()  { if (window.__faceDebug) window.__faceDebug.look( window.faceConfig.lookMax); }
 function lookCenter() { if (window.__faceDebug) window.__faceDebug.look(0); }
+
+// ── Grid overlay ─────────────────────────────────────────────────────
+const gridCanvas = document.getElementById('grid-overlay');
+const gridCtx    = gridCanvas.getContext('2d');
+const GW = 240, GH = 282;
+
+function drawGrid() {
+  gridCtx.clearRect(0, 0, GW, GH);
+
+  const STEP     = 20;   // grid spacing in canvas pixels
+  const LINE     = 'rgba(255, 255, 255, 0.08)';
+  const CENTER   = 'rgba(255, 100, 100, 0.35)';
+  const THIRD    = 'rgba(100, 160, 255, 0.20)';
+
+  // Regular grid lines
+  gridCtx.strokeStyle = LINE;
+  gridCtx.lineWidth   = 0.5;
+  for (let x = 0; x <= GW; x += STEP) {
+    gridCtx.beginPath(); gridCtx.moveTo(x, 0); gridCtx.lineTo(x, GH); gridCtx.stroke();
+  }
+  for (let y = 0; y <= GH; y += STEP) {
+    gridCtx.beginPath(); gridCtx.moveTo(0, y); gridCtx.lineTo(GW, y); gridCtx.stroke();
+  }
+
+  // Rule-of-thirds lines
+  gridCtx.strokeStyle = THIRD;
+  gridCtx.lineWidth   = 0.75;
+  [GW / 3, (GW * 2) / 3].forEach(x => {
+    gridCtx.beginPath(); gridCtx.moveTo(x, 0); gridCtx.lineTo(x, GH); gridCtx.stroke();
+  });
+  [GH / 3, (GH * 2) / 3].forEach(y => {
+    gridCtx.beginPath(); gridCtx.moveTo(0, y); gridCtx.lineTo(GW, y); gridCtx.stroke();
+  });
+
+  // Center crosshair
+  gridCtx.strokeStyle = CENTER;
+  gridCtx.lineWidth   = 1;
+  gridCtx.beginPath(); gridCtx.moveTo(GW / 2, 0); gridCtx.lineTo(GW / 2, GH); gridCtx.stroke();
+  gridCtx.beginPath(); gridCtx.moveTo(0, GH / 2); gridCtx.lineTo(GW, GH / 2); gridCtx.stroke();
+}
+
+function setGrid(on) {
+  if (on) drawGrid();
+  else gridCtx.clearRect(0, 0, GW, GH);
+}
 
 // ── Export ────────────────────────────────────────────────────────────
 function exportConfig() {
