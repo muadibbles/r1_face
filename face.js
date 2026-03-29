@@ -1,6 +1,6 @@
 // face.js — R1 Face Character
-// Designed for 640x480 display.
-// Phase 1: blink + look-around idle animation.
+// Designed for 240x282 display (Rabbit R1 Creations).
+// v0.2
 
 (function () {
   const canvas = document.getElementById('face');
@@ -210,62 +210,14 @@
     ctx.restore();
   }
 
-  // ── Debug overlay ────────────────────────────────────────────────────
-  let debugOpen = false;
+  // ── Version overlay ──────────────────────────────────────────────────
+  const VERSION = 'v0.2';
 
-  // Hit region for the toggle (x button or state text block)
-  const DEBUG_X = 4, DEBUG_Y = H - 16, DEBUG_W = 10, DEBUG_H = 10;
-
-  canvas.addEventListener('click', function (e) {
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-
-    if (!debugOpen) {
-      // Check if click is on the small x
-      if (mx >= DEBUG_X && mx <= DEBUG_X + DEBUG_W &&
-          my >= DEBUG_Y && my <= DEBUG_Y + DEBUG_H) {
-        debugOpen = true;
-      }
-    } else {
-      // Any click while open closes it
-      debugOpen = false;
-    }
-  });
-
-  function drawDebug() {
-    if (!debugOpen) {
-      // Draw small dark x in lower left
-      ctx.save();
-      ctx.font = '12px monospace';
-      ctx.fillStyle = '#333355';
-      ctx.fillText('×', DEBUG_X, DEBUG_Y + DEBUG_H - 2);
-      ctx.restore();
-      return;
-    }
-
-    // Current phase only
-    const lines = [
-      `blink: ${state.blinkPhase}`,
-      `look:  ${state.lookPhase}`,
-      `tilt:  ${state.tiltX.toFixed(1)}, ${state.tiltY.toFixed(1)}`,
-    ];
-
-    const lh = 14;  // line height
-    const pad = 6;
-    const bw = 180, bh = lines.length * lh + pad * 2;
-    const bx = 8, by = H - bh - 8;
-
-    // Background panel
+  function drawVersion() {
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(bx, by, bw, bh);
-
-    ctx.font = '11px monospace';
-    ctx.fillStyle = '#445566';
-    lines.forEach((line, i) => {
-      ctx.fillText(line, bx + pad, by + pad + (i + 1) * lh - 2);
-    });
+    ctx.font = '9px monospace';
+    ctx.fillStyle = '#2a2a3a';
+    ctx.fillText(VERSION, 4, H - 4);
     ctx.restore();
   }
 
@@ -279,7 +231,7 @@
     update(dt);
     drawBackground();
     EYES.forEach(drawEye);
-    drawDebug();
+    drawVersion();
 
     requestAnimationFrame(loop);
   }
