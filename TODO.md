@@ -12,7 +12,7 @@
 
 ## Reactivity
 - [x] Eye darts / look-around idle
-- [ ] Accelerometer — tilt device, eyes dart in that direction
+- [x] Accelerometer — tilt device, eyes dart in that direction
 - [ ] PTT button press triggers attentive/listening expression
 - [ ] Respond to R1 state (thinking, speaking, idle) with different expressions
 
