@@ -1,6 +1,6 @@
 // face.js — R1 Face Character
 // Designed for 240x282 display (Rabbit R1 Creations).
-// v0.026
+// v0.027
 
 // ── Easing functions ─────────────────────────────────────────────────
 window.FACE_EASINGS = {
@@ -307,7 +307,7 @@ window.FACE_EASINGS = {
     ctx.restore();
   }
 
-  const VERSION = 'v0.026';
+  const VERSION = 'v0.027';
   function drawVersion() {
     ctx.save();
     ctx.font = '11px monospace';
@@ -339,6 +339,13 @@ window.FACE_EASINGS = {
     },
     getEmotion() { return emo.name; },
   };
+
+  // ── PTT button — tap to cycle emotions ──────────────────────────────
+  window.addEventListener('sideClick', () => {
+    const names  = window.FACE_EMOTION_NAMES;
+    const next   = (names.indexOf(emo.name) + 1) % names.length;
+    window.__faceDebug.setEmotion(names[next]);
+  });
 
   // ── Main loop ────────────────────────────────────────────────────────
   let lastTime = performance.now();
