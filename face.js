@@ -1,6 +1,6 @@
 // face.js — R1 Face Character
 // Designed for 240x282 display (Rabbit R1 Creations).
-// v0.027
+// v0.028
 
 // ── Easing functions ─────────────────────────────────────────────────
 window.FACE_EASINGS = {
@@ -307,12 +307,18 @@ window.FACE_EASINGS = {
     ctx.restore();
   }
 
-  const VERSION = 'v0.027';
-  function drawVersion() {
+  const VERSION = 'v0.028';
+  function drawHUD() {
     ctx.save();
     ctx.font = '11px monospace';
-    ctx.fillStyle = '#4a4a6a';
+    ctx.fillStyle = '#9090b8';
+
+    ctx.textAlign = 'left';
     ctx.fillText(VERSION, 4, H - 4);
+
+    ctx.textAlign = 'right';
+    ctx.fillText(emo.name, W - 4, H - 4);
+
     ctx.restore();
   }
 
@@ -356,7 +362,7 @@ window.FACE_EASINGS = {
     drawBackground();
     drawEye(-1);  drawEye(1);
     drawBrow(-1); drawBrow(1);
-    drawVersion();
+    drawHUD();
     requestAnimationFrame(loop);
   }
 
