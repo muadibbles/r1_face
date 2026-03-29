@@ -1,6 +1,6 @@
 // face.js — R1 Face Character
 // Designed for 240x282 display (Rabbit R1 Creations).
-// v0.2
+// v0.21
 
 (function () {
   const canvas = document.getElementById('face');
@@ -216,7 +216,7 @@
   }
 
   // ── Version overlay ──────────────────────────────────────────────────
-  const VERSION = 'v0.2';
+  const VERSION = 'v0.21';
 
   function drawVersion() {
     ctx.save();
