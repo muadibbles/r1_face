@@ -475,7 +475,18 @@
 </div><!-- /app -->
 
 <script>
+  // Seed designer with whatever config is baked into index.html,
+  // so the designer always starts in sync with the live face.
   window.faceConfig = {};
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', 'index.html', false);  // synchronous — runs before face.js
+    xhr.send();
+    if (xhr.status === 200) {
+      const match = xhr.responseText.match(/window\.faceConfig\s*=\s*(\{[\s\S]*?\});?\s*<\/script>/);
+      if (match) window.faceConfig = JSON.parse(match[1]);
+    }
+  } catch (e) { /* no baked config — face.js will use defaults */ }
 </script>
 <script src="face.js?v=0.030"></script>
 <script>
