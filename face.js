@@ -1,6 +1,6 @@
 // face.js — R1 Face Character
 // Designed for 240x282 display (Rabbit R1 Creations).
-// v0.032
+// v0.033
 
 // ── Easing functions ─────────────────────────────────────────────────
 window.FACE_EASINGS = {
@@ -88,6 +88,10 @@ window.FACE_EASINGS = {
     eyeSpacing: 40,
     eyeOffsetY: 0,
     eyeTilt:    10,
+
+    // Per-eye shape offsets — added on top of the global eyeRx / eyeRy
+    eyeRxOffsetL: 0, eyeRxOffsetR: 0,
+    eyeRyOffsetL: 0, eyeRyOffsetR: 0,
 
     blinkWaitMin:     2500,
     blinkWaitMax:     5500,
@@ -286,9 +290,13 @@ window.FACE_EASINGS = {
     const ex = CX + side * cfg.eyeSpacing;
     const ey = CY + cfg.eyeOffsetY + emo.live.eyeYShift;
 
+    // Per-eye shape: global + individual offset
+    const rx = cfg.eyeRx + (side === -1 ? cfg.eyeRxOffsetL : cfg.eyeRxOffsetR);
+    const ryBase = cfg.eyeRy + (side === -1 ? cfg.eyeRyOffsetL : cfg.eyeRyOffsetR);
+
     // Eye height: scale × emotion × clamp blink on top of lidRest
     const closure = Math.max(state.blink, emo.live.lidRest);
-    const ry = cfg.eyeRy * emo.live.eyeRyScale * (1 - closure);
+    const ry = ryBase * emo.live.eyeRyScale * (1 - closure);
     if (ry <= 0) return;
 
     const tilt = side * cfg.eyeTilt * Math.PI / 180;
@@ -297,7 +305,7 @@ window.FACE_EASINGS = {
     ctx.translate(ex + state.lookX + state.tiltX, ey + state.tiltY);
     ctx.rotate(tilt);
     ctx.beginPath();
-    ctx.ellipse(0, 0, cfg.eyeRx, ry, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
     ctx.clip();
     ctx.fillStyle = cfg.eyeColor;
     ctx.fill();
@@ -341,7 +349,7 @@ window.FACE_EASINGS = {
     ctx.restore();
   }
 
-  const VERSION = 'v0.032';
+  const VERSION = 'v0.033';
   function drawHUD() {
     ctx.save();
     ctx.font = '11px monospace';

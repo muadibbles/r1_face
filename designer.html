@@ -488,7 +488,7 @@
     }
   } catch (e) { /* no baked config — face.js will use defaults */ }
 </script>
-<script src="face.js?v=0.032"></script>
+<script src="face.js?v=0.033"></script>
 <script>
 
 // ── Accordion ─────────────────────────────────────────────────────────
@@ -595,6 +595,27 @@ SELECT_SCHEMA.forEach(({ key, label, panel }) => {
     v  => { window.faceConfig[key] = v; });
   document.getElementById('panel-' + panel).appendChild(row);
 });
+
+// ── Per-eye shape offsets (appended to eyes panel) ───────────────────
+{
+  const eyesPanel = document.getElementById('panel-eyes');
+  const hr = document.createElement('hr'); hr.className = 'divider'; eyesPanel.appendChild(hr);
+  const lbl = document.createElement('div'); lbl.className = 'sub-label'; lbl.textContent = 'Per-eye adjustments'; eyesPanel.appendChild(lbl);
+
+  const deltaFmt = v => (v > 0 ? '+' : '') + v + 'px';
+  const eyeOffsets = [
+    { key: 'eyeRxOffsetL', label: 'Width adj L'  },
+    { key: 'eyeRxOffsetR', label: 'Width adj R'  },
+    { key: 'eyeRyOffsetL', label: 'Height adj L' },
+    { key: 'eyeRyOffsetR', label: 'Height adj R' },
+  ];
+  eyeOffsets.forEach(({ key, label }) => {
+    const { row } = makeSliderRow(key, label, -30, 30, 0.5, deltaFmt,
+      () => window.faceConfig[key] ?? 0,
+      n  => { window.faceConfig[key] = n; });
+    eyesPanel.appendChild(row);
+  });
+}
 
 COLOR_SCHEMA.forEach(({ key, label, panel }) => {
   const row = makeColorRow(key, label,
