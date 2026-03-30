@@ -285,13 +285,13 @@
       margin: 4px 0;
     }
 
-    /* ── Export ── */
-    #export-wrap {
+    /* ── Export / Load ── */
+    #export-wrap, #load-wrap {
       padding: 0 0 24px;
       display: none;
     }
 
-    #export-wrap.visible { display: block; }
+    #export-wrap.visible, #load-wrap.visible { display: block; }
 
     #export-out {
       background: #0a0a10;
@@ -304,6 +304,28 @@
       white-space: pre;
       overflow-x: auto;
       margin-top: 10px;
+    }
+
+    #load-in {
+      width: 100%;
+      height: 160px;
+      background: #0a0a10;
+      border: 1px solid #1e1e2e;
+      border-radius: 8px;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #7af;
+      resize: vertical;
+    }
+
+    #load-in:focus { outline: none; border-color: #5577ff; }
+
+    #load-error {
+      color: #f66;
+      font-size: 12px;
+      margin-top: 6px;
+      min-height: 16px;
     }
 
     .btn.primary {
@@ -340,8 +362,9 @@
       </label>
     </div>
 
-    <div style="margin-top: auto; width: 100%;">
+    <div style="margin-top: auto; width: 100%; display: flex; flex-direction: column; gap: 6px;">
       <button class="btn primary" onclick="exportConfig()">Export config JSON</button>
+      <button class="btn primary" onclick="toggleLoadPanel()">Load config JSON</button>
     </div>
   </div>
 
@@ -429,6 +452,16 @@
       <div id="export-out"></div>
     </div>
 
+    <!-- Load input -->
+    <div id="load-wrap">
+      <textarea id="load-in" placeholder='Paste config JSON here…' spellcheck="false"></textarea>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button class="btn primary" style="flex:1" onclick="applyLoadedConfig()">Apply</button>
+        <button class="btn" style="flex:1" onclick="toggleLoadPanel()">Cancel</button>
+      </div>
+      <div id="load-error"></div>
+    </div>
+
   </div><!-- /right-panel -->
 </div><!-- /app -->
 
@@ -480,50 +513,50 @@ const COLOR_SCHEMA = [
   { key: 'browColor', label: 'Brow',       panel: 'colors' },
 ];
 
+// ── Input registry — for refreshing all inputs on config load ─────────
+const allInputRefs = [];  // { refresh: fn } — called after config load
+
 // ── Build sliders ─────────────────────────────────────────────────────
 function makeSliderRow(key, label, min, max, step, fmt, getCurrentVal, onUpdate) {
-  const val   = getCurrentVal();
-  const row   = document.createElement('div');
-  row.className = 'row';
-  const lbl   = document.createElement('label');
-  lbl.textContent = label;
-  const input = document.createElement('input');
-  input.type  = 'range'; input.min = min; input.max = max; input.step = step; input.value = val;
-  const display = document.createElement('span');
-  display.className = 'val'; display.textContent = fmt(val);
+  const val     = getCurrentVal();
+  const row     = document.createElement('div'); row.className = 'row';
+  const lbl     = document.createElement('label'); lbl.textContent = label;
+  const input   = document.createElement('input');
+  input.type    = 'range'; input.min = min; input.max = max; input.step = step; input.value = val;
+  const display = document.createElement('span'); display.className = 'val'; display.textContent = fmt(val);
   input.addEventListener('input', () => {
-    const n = parseFloat(input.value);
-    onUpdate(n);
-    display.textContent = fmt(n);
+    const n = parseFloat(input.value); onUpdate(n); display.textContent = fmt(n);
   });
   row.appendChild(lbl); row.appendChild(input); row.appendChild(display);
+  allInputRefs.push({ refresh() { const v = getCurrentVal(); input.value = v; display.textContent = fmt(v); } });
   return { row, input, display, fmt };
 }
 
 function makeSelectRow(key, label, options, getCurrentVal, onUpdate) {
-  const val  = getCurrentVal();
-  const row  = document.createElement('div'); row.className = 'row';
-  const lbl  = document.createElement('label'); lbl.textContent = label;
-  const sel  = document.createElement('select');
+  const val = getCurrentVal();
+  const row = document.createElement('div'); row.className = 'row';
+  const lbl = document.createElement('label'); lbl.textContent = label;
+  const sel = document.createElement('select');
   options.forEach(name => {
-    const opt = document.createElement('option');
-    opt.value = name; opt.textContent = name;
+    const opt = document.createElement('option'); opt.value = name; opt.textContent = name;
     if (name === val) opt.selected = true;
     sel.appendChild(opt);
   });
   sel.addEventListener('change', () => onUpdate(sel.value));
   row.appendChild(lbl); row.appendChild(sel);
+  allInputRefs.push({ refresh() { sel.value = getCurrentVal(); } });
   return row;
 }
 
 function makeColorRow(key, label, getCurrentVal, onUpdate) {
-  const val  = getCurrentVal();
-  const row  = document.createElement('div'); row.className = 'color-row';
-  const lbl  = document.createElement('label'); lbl.textContent = label;
-  const inp  = document.createElement('input'); inp.type = 'color'; inp.value = val;
-  const hex  = document.createElement('span'); hex.className = 'hex'; hex.textContent = val;
+  const val = getCurrentVal();
+  const row = document.createElement('div'); row.className = 'color-row';
+  const lbl = document.createElement('label'); lbl.textContent = label;
+  const inp = document.createElement('input'); inp.type = 'color'; inp.value = val;
+  const hex = document.createElement('span'); hex.className = 'hex'; hex.textContent = val;
   inp.addEventListener('input', () => { onUpdate(inp.value); hex.textContent = inp.value; });
   row.appendChild(lbl); row.appendChild(inp); row.appendChild(hex);
+  allInputRefs.push({ refresh() { const v = getCurrentVal(); inp.value = v; hex.textContent = v; } });
   return row;
 }
 
@@ -685,11 +718,52 @@ function setGrid(on) { if (on) drawGrid(); else gridCtx.clearRect(0, 0, GW, GH);
 
 // ── Export ────────────────────────────────────────────────────────────
 function exportConfig() {
+  document.getElementById('load-wrap').classList.remove('visible');
   const out  = document.getElementById('export-out');
   const wrap = document.getElementById('export-wrap');
   out.textContent = JSON.stringify(window.faceConfig, null, 2);
   wrap.classList.add('visible');
   out.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ── Load ──────────────────────────────────────────────────────────────
+function toggleLoadPanel() {
+  document.getElementById('export-wrap').classList.remove('visible');
+  const wrap = document.getElementById('load-wrap');
+  const isVisible = wrap.classList.toggle('visible');
+  if (isVisible) {
+    document.getElementById('load-in').value = '';
+    document.getElementById('load-error').textContent = '';
+    wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    setTimeout(() => document.getElementById('load-in').focus(), 220);
+  }
+}
+
+function applyLoadedConfig() {
+  const raw = document.getElementById('load-in').value.trim();
+  const err = document.getElementById('load-error');
+  err.textContent = '';
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch (e) { err.textContent = 'Invalid JSON: ' + e.message; return; }
+  if (typeof parsed !== 'object' || parsed === null) { err.textContent = 'Expected a JSON object.'; return; }
+
+  // Deep merge into faceConfig
+  Object.assign(window.faceConfig, parsed);
+  if (parsed.emotions) {
+    window.faceConfig.emotions = window.faceConfig.emotions || {};
+    Object.assign(window.faceConfig.emotions, parsed.emotions);
+  }
+
+  // Refresh all registered inputs
+  allInputRefs.forEach(r => r.refresh());
+
+  // Refresh emotion + brow sliders for currently selected emotion
+  switchEmotion(selectedEmotion);
+
+  // Re-apply current emotion to face
+  window.__faceDebug?.setEmotion(window.__faceDebug.getEmotion());
+
+  document.getElementById('load-wrap').classList.remove('visible');
 }
 
 </script>
