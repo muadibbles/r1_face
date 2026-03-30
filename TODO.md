@@ -16,6 +16,9 @@
 - [ ] PTT button press triggers attentive/listening expression
 - [ ] Respond to R1 state (thinking, speaking, idle) with different expressions
 
+## Deployment
+- [ ] Single-file export — inline face.js into index.html so the R1 needs no internet and no second file fetch
+
 ## Polish
 - [ ] Eyelash fringe at lid edge
 - [ ] Subtle eye gloss — small white arc highlight inside eye
