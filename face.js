@@ -313,6 +313,7 @@ window.FACE_EASINGS = {
   }
 
   function drawBrow(side) {
+    if (emo.live.browThickness <= 0) return;
     const ex = CX + side * cfg.eyeSpacing;
     const ey = CY + cfg.eyeOffsetY + emo.live.eyeYShift;
 
