@@ -6,32 +6,41 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    body {
+    html, body {
+      height: 100%;
       background: #111118;
       color: #bbc;
       font-family: system-ui, -apple-system, sans-serif;
       font-size: 13px;
-      min-height: 100vh;
+      overflow: hidden;
     }
 
-    /* ── Preview bar ── */
-    #preview {
-      background: #0a0a10;
-      border-bottom: 1px solid #1e1e2e;
+    /* ── Two-column layout ── */
+    #app {
       display: flex;
-      justify-content: center;
+      height: 100vh;
+    }
+
+    /* ── Left panel — fixed, always visible ── */
+    #left-panel {
+      width: 288px;
+      flex-shrink: 0;
+      background: #0a0a10;
+      border-right: 1px solid #1a1a28;
+      display: flex;
+      flex-direction: column;
       align-items: center;
-      padding: 24px;
-      gap: 32px;
+      padding: 24px 20px;
+      gap: 16px;
     }
 
     #canvas-wrap {
       position: relative;
       border: 1px solid #1e1e2e;
-      border-radius: 4px;
-      /* displayed at 2× */
+      border-radius: 6px;
       width: 240px;
       height: 282px;
+      flex-shrink: 0;
     }
 
     #canvas-wrap canvas {
@@ -44,57 +53,133 @@
 
     #grid-overlay { pointer-events: none; }
 
+    /* ── Preview action buttons ── */
     #preview-actions {
+      width: 100%;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
     }
 
-    /* ── Controls grid ── */
-    #controls {
-      max-width: 860px;
-      margin: 0 auto;
-      padding: 24px 20px 40px;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
+    .action-row {
+      display: flex;
+      gap: 6px;
     }
 
-    @media (max-width: 600px) {
-      #controls { grid-template-columns: 1fr; }
+    .action-row .btn { flex: 1; }
+
+    .btn {
+      background: #18182a;
+      color: #99a;
+      border: 1px solid #242438;
+      border-radius: 6px;
+      padding: 7px 10px;
+      cursor: pointer;
+      font-size: 12px;
+      text-align: center;
+      transition: background 0.12s, color 0.12s;
+      white-space: nowrap;
     }
 
-    .panel {
+    .btn:hover { background: #22223a; color: #ccd; }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #667;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 2px 0;
+    }
+
+    .toggle-row input { cursor: pointer; accent-color: #5577ff; }
+
+    /* ── Right panel — scrollable ── */
+    #right-panel {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* Custom scrollbar */
+    #right-panel::-webkit-scrollbar { width: 6px; }
+    #right-panel::-webkit-scrollbar-track { background: transparent; }
+    #right-panel::-webkit-scrollbar-thumb { background: #2a2a40; border-radius: 3px; }
+
+    /* ── Accordion ── */
+    .accordion { border-radius: 8px; overflow: hidden; }
+
+    .acc-header {
+      width: 100%;
       background: #15151e;
       border: 1px solid #1e1e2e;
-      border-radius: 10px;
+      border-radius: 8px;
+      padding: 11px 14px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #99a;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      transition: background 0.12s, border-radius 0.15s;
+      user-select: none;
+    }
+
+    .acc-header:hover { background: #1a1a28; color: #bbd; }
+
+    .accordion.open .acc-header {
+      border-radius: 8px 8px 0 0;
+      border-bottom-color: transparent;
+      color: #aab8cc;
+    }
+
+    .chevron {
+      font-size: 14px;
+      transition: transform 0.2s ease;
+      color: #445;
+    }
+
+    .accordion.open .chevron { transform: rotate(180deg); color: #667; }
+
+    .acc-body {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.22s ease;
+    }
+
+    .accordion.open .acc-body { max-height: 2000px; }
+
+    .acc-inner {
+      background: #13131c;
+      border: 1px solid #1e1e2e;
+      border-top: none;
+      border-radius: 0 0 8px 8px;
       padding: 16px;
     }
 
-    .panel h3 {
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: #556;
-      margin-bottom: 14px;
-    }
-
-    /* ── Slider row ── */
+    /* ── Slider rows ── */
     .row {
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-bottom: 11px;
+      margin-bottom: 10px;
     }
 
     .row:last-child { margin-bottom: 0; }
 
     .row label {
-      width: 82px;
+      width: 86px;
       flex-shrink: 0;
-      color: #889;
+      color: #778;
       white-space: nowrap;
+      font-size: 12px;
     }
 
     .row input[type="range"] {
@@ -118,79 +203,50 @@
     .row select:focus { outline: none; border-color: #5577ff; }
 
     .row .val {
-      width: 54px;
+      width: 56px;
       flex-shrink: 0;
       text-align: right;
-      color: #dde;
+      color: #ccd;
       font-variant-numeric: tabular-nums;
       font-size: 12px;
     }
 
-    /* ── Color row ── */
+    /* ── Color rows ── */
     .color-row {
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-bottom: 11px;
+      margin-bottom: 10px;
     }
 
-    .color-row label {
-      width: 82px;
-      flex-shrink: 0;
-      color: #889;
-    }
+    .color-row:last-child { margin-bottom: 0; }
+
+    .color-row label { width: 86px; flex-shrink: 0; color: #778; font-size: 12px; }
 
     .color-row input[type="color"] {
-      width: 48px;
-      height: 28px;
-      border: 1px solid #333;
-      border-radius: 5px;
+      width: 44px;
+      height: 26px;
+      border: 1px solid #2a2a3a;
+      border-radius: 4px;
       cursor: pointer;
       background: none;
       padding: 2px;
     }
 
-    .color-row .hex {
-      color: #667;
-      font-family: monospace;
-      font-size: 12px;
-    }
-
-    /* ── Buttons ── */
-    .btn {
-      background: #22223a;
-      color: #aac;
-      border: 1px solid #2e2e4a;
-      border-radius: 6px;
-      padding: 7px 14px;
-      cursor: pointer;
-      font-size: 12px;
-      white-space: nowrap;
-      transition: background 0.15s;
-    }
-
-    .btn:hover { background: #2a2a4a; color: #dde; }
-
-    .btn.primary {
-      background: #2a3a6a;
-      border-color: #3a4a8a;
-      color: #aac8ff;
-    }
-
-    .btn.primary:hover { background: #334480; }
+    .color-row .hex { color: #556; font-family: monospace; font-size: 12px; }
 
     /* ── Emotion buttons ── */
     .emo-btns {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
 
     .emo-btn {
-      background: #1a1a28;
-      color: #889;
-      border: 1px solid #2a2a3e;
+      background: #18182a;
+      color: #778;
+      border: 1px solid #242438;
       border-radius: 6px;
       padding: 6px 12px;
       cursor: pointer;
@@ -199,23 +255,16 @@
     }
 
     .emo-btn:hover  { background: #22223a; color: #bbd; }
-    .emo-btn.active { background: #2a3a6a; border-color: #3a4a8a; color: #aac8ff; }
+    .emo-btn.active { background: #243060; border-color: #3a4a8a; color: #aac8ff; }
 
-    /* ── Emotion sliders sub-grid ── */
+    /* ── Emotion param sub-grid ── */
     #emotion-params {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 0 20px;
+      column-gap: 20px;
     }
 
     #emotion-params .row { margin-bottom: 10px; }
-
-    .section-divider {
-      grid-column: 1 / -1;
-      border: none;
-      border-top: 1px solid #1e1e2e;
-      margin: 10px 0 14px;
-    }
 
     .sub-label {
       grid-column: 1 / -1;
@@ -223,26 +272,22 @@
       font-weight: 600;
       letter-spacing: 0.1em;
       text-transform: uppercase;
-      color: #445;
-      margin-bottom: 8px;
+      color: #334;
+      margin: 10px 0 8px;
     }
 
-    .toggle-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: #889;
-      cursor: pointer;
-      padding: 4px 0;
+    .sub-label:first-child { margin-top: 0; }
+
+    hr.divider {
+      grid-column: 1 / -1;
+      border: none;
+      border-top: 1px solid #1a1a28;
+      margin: 4px 0;
     }
 
-    .toggle-row input { cursor: pointer; accent-color: #5577ff; }
-
-    /* ── Export output ── */
+    /* ── Export ── */
     #export-wrap {
-      max-width: 860px;
-      margin: 0 auto 40px;
-      padding: 0 20px;
+      padding: 0 0 24px;
       display: none;
     }
 
@@ -258,107 +303,162 @@
       color: #7af;
       white-space: pre;
       overflow-x: auto;
+      margin-top: 10px;
     }
+
+    .btn.primary {
+      background: #1e2e58;
+      border-color: #2e3e78;
+      color: #8ab0ff;
+      width: 100%;
+      padding: 9px;
+    }
+
+    .btn.primary:hover { background: #263870; }
   </style>
 </head>
 <body>
+<div id="app">
 
-<!-- ── Face preview ─────────────────────────────────────────────────── -->
-<div id="preview">
-  <div id="canvas-wrap">
-    <canvas id="face" width="240" height="282"></canvas>
-    <canvas id="grid-overlay" width="240" height="282"></canvas>
-  </div>
-  <div id="preview-actions">
-    <button class="btn" onclick="triggerBlink()">Blink now</button>
-    <button class="btn" onclick="lookLeft()">Look left</button>
-    <button class="btn" onclick="lookRight()">Look right</button>
-    <button class="btn" onclick="lookCenter()">Look center</button>
-    <label class="toggle-row">
-      <input type="checkbox" id="grid-toggle" onchange="setGrid(this.checked)">
-      <span>Show grid</span>
-    </label>
-  </div>
-</div>
+  <!-- ── Left: face preview ──────────────────────────────────────────── -->
+  <div id="left-panel">
+    <div id="canvas-wrap">
+      <canvas id="face" width="240" height="282"></canvas>
+      <canvas id="grid-overlay" width="240" height="282"></canvas>
+    </div>
 
-<!-- ── Slider panels ─────────────────────────────────────────────────── -->
-<div id="controls">
+    <div id="preview-actions">
+      <div class="action-row">
+        <button class="btn" onclick="triggerBlink()">Blink</button>
+        <button class="btn" onclick="lookLeft()">◀</button>
+        <button class="btn" onclick="lookCenter()">·</button>
+        <button class="btn" onclick="lookRight()">▶</button>
+      </div>
+      <label class="toggle-row">
+        <input type="checkbox" id="grid-toggle" onchange="setGrid(this.checked)">
+        <span>Show grid</span>
+      </label>
+    </div>
 
-  <div class="panel" id="panel-eyes">
-    <h3>Eyes</h3>
-  </div>
-
-  <div class="panel" id="panel-blink">
-    <h3>Blink</h3>
+    <div style="margin-top: auto; width: 100%;">
+      <button class="btn primary" onclick="exportConfig()">Export config JSON</button>
+    </div>
   </div>
 
-  <div class="panel" id="panel-look">
-    <h3>Look</h3>
-  </div>
+  <!-- ── Right: scrollable controls ─────────────────────────────────── -->
+  <div id="right-panel">
 
-  <div class="panel" id="panel-tilt">
-    <h3>Tilt (accelerometer)</h3>
-  </div>
+    <!-- Emotions -->
+    <div class="accordion open" id="acc-emotions">
+      <button class="acc-header" onclick="toggleAcc('acc-emotions')">
+        Emotions <span class="chevron">▾</span>
+      </button>
+      <div class="acc-body">
+        <div class="acc-inner">
+          <div class="emo-btns" id="emo-btns"></div>
+          <div id="emotion-params"></div>
+        </div>
+      </div>
+    </div>
 
-  <div class="panel" id="panel-colors">
-    <h3>Colors</h3>
-  </div>
+    <!-- Eyes -->
+    <div class="accordion open" id="acc-eyes">
+      <button class="acc-header" onclick="toggleAcc('acc-eyes')">
+        Eyes <span class="chevron">▾</span>
+      </button>
+      <div class="acc-body">
+        <div class="acc-inner" id="panel-eyes"></div>
+      </div>
+    </div>
 
-  <!-- Emotions panel — full width -->
-  <div class="panel" id="panel-emotions" style="grid-column: 1 / -1;">
-    <h3>Emotions</h3>
+    <!-- Blink -->
+    <div class="accordion open" id="acc-blink">
+      <button class="acc-header" onclick="toggleAcc('acc-blink')">
+        Blink <span class="chevron">▾</span>
+      </button>
+      <div class="acc-body">
+        <div class="acc-inner" id="panel-blink"></div>
+      </div>
+    </div>
 
-    <div class="emo-btns" id="emo-btns"></div>
+    <!-- Look -->
+    <div class="accordion open" id="acc-look">
+      <button class="acc-header" onclick="toggleAcc('acc-look')">
+        Look <span class="chevron">▾</span>
+      </button>
+      <div class="acc-body">
+        <div class="acc-inner" id="panel-look"></div>
+      </div>
+    </div>
 
-    <div id="emotion-params"></div>
-  </div>
+    <!-- Tilt -->
+    <div class="accordion" id="acc-tilt">
+      <button class="acc-header" onclick="toggleAcc('acc-tilt')">
+        Tilt (accelerometer) <span class="chevron">▾</span>
+      </button>
+      <div class="acc-body">
+        <div class="acc-inner" id="panel-tilt"></div>
+      </div>
+    </div>
 
-</div>
+    <!-- Colors -->
+    <div class="accordion" id="acc-colors">
+      <button class="acc-header" onclick="toggleAcc('acc-colors')">
+        Colors <span class="chevron">▾</span>
+      </button>
+      <div class="acc-body">
+        <div class="acc-inner" id="panel-colors"></div>
+      </div>
+    </div>
 
-<!-- ── Export ────────────────────────────────────────────────────────── -->
-<div style="text-align:center; margin-bottom: 32px;">
-  <button class="btn primary" onclick="exportConfig()">Export config JSON</button>
-</div>
+    <!-- Export output -->
+    <div id="export-wrap">
+      <div id="export-out"></div>
+    </div>
 
-<div id="export-wrap">
-  <div id="export-out"></div>
-</div>
+  </div><!-- /right-panel -->
+</div><!-- /app -->
 
-<!-- face.js must load after faceConfig is set -->
 <script>
-  window.faceConfig = {};  // face.js will fill in all defaults
+  window.faceConfig = {};
 </script>
-<script src="face.js?v=0.026"></script>
+<script src="face.js?v=0.028"></script>
 <script>
+
+// ── Accordion ─────────────────────────────────────────────────────────
+function toggleAcc(id) {
+  const el = document.getElementById(id);
+  el.classList.toggle('open');
+}
 
 // ── Slider schema ─────────────────────────────────────────────────────
-// { key, label, panel, min, max, step, fmt }
-
 const SCHEMA = [
-  // Eyes
-  { key: 'eyeRx',      label: 'Width',     panel: 'eyes',   min: 5,    max: 80,    step: 1,    fmt: v => v + 'px' },
-  { key: 'eyeRy',      label: 'Height',    panel: 'eyes',   min: 5,    max: 80,    step: 1,    fmt: v => v + 'px' },
-  { key: 'eyeSpacing', label: 'Spacing',   panel: 'eyes',   min: 10,   max: 110,   step: 1,    fmt: v => v + 'px' },
-  { key: 'eyeOffsetY', label: 'Y Offset',  panel: 'eyes',   min: -80,  max: 80,    step: 1,    fmt: v => v + 'px' },
-  { key: 'eyeTilt',    label: 'Tilt',      panel: 'eyes',   min: 0,    max: 45,    step: 0.5,  fmt: v => v + '°'  },
+  { key: 'eyeRx',      label: 'Width',        panel: 'eyes',  min: 5,    max: 80,    step: 1,    fmt: v => v + 'px' },
+  { key: 'eyeRy',      label: 'Height',       panel: 'eyes',  min: 5,    max: 80,    step: 1,    fmt: v => v + 'px' },
+  { key: 'eyeSpacing', label: 'Spacing',      panel: 'eyes',  min: 10,   max: 110,   step: 1,    fmt: v => v + 'px' },
+  { key: 'eyeOffsetY', label: 'Y Offset',     panel: 'eyes',  min: -80,  max: 80,    step: 1,    fmt: v => v + 'px' },
+  { key: 'eyeTilt',    label: 'Tilt',         panel: 'eyes',  min: 0,    max: 45,    step: 0.5,  fmt: v => v + '°'  },
 
-  // Blink
-  { key: 'blinkWaitMin', label: 'Wait min', panel: 'blink', min: 200,  max: 8000,  step: 100,  fmt: v => v + 'ms' },
-  { key: 'blinkWaitMax', label: 'Wait max', panel: 'blink', min: 500,  max: 12000, step: 100,  fmt: v => v + 'ms' },
+  { key: 'blinkWaitMin', label: 'Wait min',   panel: 'blink', min: 200,  max: 8000,  step: 100,  fmt: v => v + 'ms' },
+  { key: 'blinkWaitMax', label: 'Wait max',   panel: 'blink', min: 500,  max: 12000, step: 100,  fmt: v => v + 'ms' },
 
-  // Look
-  { key: 'lookMax',         label: 'Range',        panel: 'look', min: 0,   max: 80,   step: 1,   fmt: v => v + 'px' },
-  { key: 'lookDurationMin', label: 'Move dur min', panel: 'look', min: 50,  max: 1000, step: 10,  fmt: v => v + 'ms' },
-  { key: 'lookDurationMax', label: 'Move dur max', panel: 'look', min: 100, max: 2000, step: 10,  fmt: v => v + 'ms' },
-  { key: 'lookWaitMin',  label: 'Wait min',  panel: 'look', min: 100,  max: 5000,  step: 100,  fmt: v => v + 'ms'  },
-  { key: 'lookWaitMax',  label: 'Wait max',  panel: 'look', min: 500,  max: 8000,  step: 100,  fmt: v => v + 'ms'  },
-  { key: 'lookHoldMin',  label: 'Hold min',  panel: 'look', min: 50,   max: 3000,  step: 50,   fmt: v => v + 'ms'  },
-  { key: 'lookHoldMax',  label: 'Hold max',  panel: 'look', min: 100,  max: 6000,  step: 100,  fmt: v => v + 'ms'  },
+  { key: 'lookMax',         label: 'Range',        panel: 'look', min: 0,   max: 80,   step: 1,  fmt: v => v + 'px' },
+  { key: 'lookDurationMin', label: 'Move dur min',  panel: 'look', min: 50,  max: 1000, step: 10, fmt: v => v + 'ms' },
+  { key: 'lookDurationMax', label: 'Move dur max',  panel: 'look', min: 100, max: 2000, step: 10, fmt: v => v + 'ms' },
+  { key: 'lookWaitMin',     label: 'Wait min',      panel: 'look', min: 100, max: 5000, step: 100, fmt: v => v + 'ms' },
+  { key: 'lookWaitMax',     label: 'Wait max',      panel: 'look', min: 500, max: 8000, step: 100, fmt: v => v + 'ms' },
+  { key: 'lookHoldMin',     label: 'Hold min',      panel: 'look', min: 50,  max: 3000, step: 50,  fmt: v => v + 'ms' },
+  { key: 'lookHoldMax',     label: 'Hold max',      panel: 'look', min: 100, max: 6000, step: 100, fmt: v => v + 'ms' },
 
-  // Tilt
-  { key: 'tiltMaxX',   label: 'Max X',     panel: 'tilt', min: 0, max: 80,  step: 1,    fmt: v => v + 'px'     },
-  { key: 'tiltMaxY',   label: 'Max Y',     panel: 'tilt', min: 0, max: 60,  step: 1,    fmt: v => v + 'px'     },
-  { key: 'tiltSmooth', label: 'Smoothing', panel: 'tilt', min: 0.01, max: 1, step: 0.01, fmt: v => v.toFixed(2) },
+  { key: 'tiltMaxX',   label: 'Max X',      panel: 'tilt', min: 0,    max: 80,  step: 1,    fmt: v => v + 'px'     },
+  { key: 'tiltMaxY',   label: 'Max Y',      panel: 'tilt', min: 0,    max: 60,  step: 1,    fmt: v => v + 'px'     },
+  { key: 'tiltSmooth', label: 'Smoothing',  panel: 'tilt', min: 0.01, max: 1,   step: 0.01, fmt: v => v.toFixed(2) },
+];
+
+const SELECT_SCHEMA = [
+  { key: 'blinkCloseEasing', label: 'Close curve', panel: 'blink' },
+  { key: 'blinkOpenEasing',  label: 'Open curve',  panel: 'blink' },
+  { key: 'lookEasing',       label: 'Move curve',  panel: 'look'  },
 ];
 
 const COLOR_SCHEMA = [
@@ -368,133 +468,96 @@ const COLOR_SCHEMA = [
 ];
 
 // ── Build sliders ─────────────────────────────────────────────────────
-SCHEMA.forEach(({ key, label, panel, min, max, step, fmt }) => {
-  const val  = window.faceConfig[key];
-  const wrap = document.getElementById('panel-' + panel);
-
+function makeSliderRow(key, label, min, max, step, fmt, getCurrentVal, onUpdate) {
+  const val   = getCurrentVal();
   const row   = document.createElement('div');
   row.className = 'row';
-
   const lbl   = document.createElement('label');
   lbl.textContent = label;
-
   const input = document.createElement('input');
-  input.type  = 'range';
-  input.min   = min;
-  input.max   = max;
-  input.step  = step;
-  input.value = val;
-
+  input.type  = 'range'; input.min = min; input.max = max; input.step = step; input.value = val;
   const display = document.createElement('span');
-  display.className = 'val';
-  display.textContent = fmt(val);
-
+  display.className = 'val'; display.textContent = fmt(val);
   input.addEventListener('input', () => {
     const n = parseFloat(input.value);
-    window.faceConfig[key] = n;
+    onUpdate(n);
     display.textContent = fmt(n);
   });
+  row.appendChild(lbl); row.appendChild(input); row.appendChild(display);
+  return { row, input, display, fmt };
+}
 
-  row.appendChild(lbl);
-  row.appendChild(input);
-  row.appendChild(display);
-  wrap.appendChild(row);
-});
+function makeSelectRow(key, label, options, getCurrentVal, onUpdate) {
+  const val  = getCurrentVal();
+  const row  = document.createElement('div'); row.className = 'row';
+  const lbl  = document.createElement('label'); lbl.textContent = label;
+  const sel  = document.createElement('select');
+  options.forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name; opt.textContent = name;
+    if (name === val) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener('change', () => onUpdate(sel.value));
+  row.appendChild(lbl); row.appendChild(sel);
+  return row;
+}
 
-// ── Easing dropdowns ─────────────────────────────────────────────────
-const SELECT_SCHEMA = [
-  { key: 'blinkCloseEasing', label: 'Close curve', panel: 'blink' },
-  { key: 'blinkOpenEasing',  label: 'Open curve',  panel: 'blink' },
-  { key: 'lookEasing',       label: 'Move curve',  panel: 'look'  },
-];
+function makeColorRow(key, label, getCurrentVal, onUpdate) {
+  const val  = getCurrentVal();
+  const row  = document.createElement('div'); row.className = 'color-row';
+  const lbl  = document.createElement('label'); lbl.textContent = label;
+  const inp  = document.createElement('input'); inp.type = 'color'; inp.value = val;
+  const hex  = document.createElement('span'); hex.className = 'hex'; hex.textContent = val;
+  inp.addEventListener('input', () => { onUpdate(inp.value); hex.textContent = inp.value; });
+  row.appendChild(lbl); row.appendChild(inp); row.appendChild(hex);
+  return row;
+}
 
 const easingNames = Object.keys(window.FACE_EASINGS);
 
+SCHEMA.forEach(({ key, label, panel, min, max, step, fmt }) => {
+  const { row } = makeSliderRow(key, label, min, max, step, fmt,
+    () => window.faceConfig[key],
+    n  => { window.faceConfig[key] = n; });
+  document.getElementById('panel-' + panel).appendChild(row);
+});
+
 SELECT_SCHEMA.forEach(({ key, label, panel }) => {
-  const val  = window.faceConfig[key];
-  const wrap = document.getElementById('panel-' + panel);
-
-  const row = document.createElement('div');
-  row.className = 'row';
-
-  const lbl = document.createElement('label');
-  lbl.textContent = label;
-
-  const select = document.createElement('select');
-  easingNames.forEach(name => {
-    const opt = document.createElement('option');
-    opt.value       = name;
-    opt.textContent = name;
-    if (name === val) opt.selected = true;
-    select.appendChild(opt);
-  });
-
-  select.addEventListener('change', () => { window.faceConfig[key] = select.value; });
-
-  row.appendChild(lbl);
-  row.appendChild(select);
-  wrap.appendChild(row);
+  const row = makeSelectRow(key, label, easingNames,
+    () => window.faceConfig[key],
+    v  => { window.faceConfig[key] = v; });
+  document.getElementById('panel-' + panel).appendChild(row);
 });
 
-// ── Build color pickers ───────────────────────────────────────────────
 COLOR_SCHEMA.forEach(({ key, label, panel }) => {
-  const val  = window.faceConfig[key];
-  const wrap = document.getElementById('panel-' + panel);
-
-  const row   = document.createElement('div');
-  row.className = 'color-row';
-
-  const lbl   = document.createElement('label');
-  lbl.textContent = label;
-
-  const input = document.createElement('input');
-  input.type  = 'color';
-  input.value = val;
-
-  const hex = document.createElement('span');
-  hex.className = 'hex';
-  hex.textContent = val;
-
-  input.addEventListener('input', () => {
-    window.faceConfig[key] = input.value;
-    hex.textContent = input.value;
-  });
-
-  row.appendChild(lbl);
-  row.appendChild(input);
-  row.appendChild(hex);
-  wrap.appendChild(row);
+  const row = makeColorRow(key, label,
+    () => window.faceConfig[key],
+    v  => { window.faceConfig[key] = v; });
+  document.getElementById('panel-' + panel).appendChild(row);
 });
 
-// ── Emotions panel ───────────────────────────────────────────────────
+// ── Emotions panel ────────────────────────────────────────────────────
 const EMOTION_PARAM_SCHEMA = [
-  // Eye shape
-  { key: 'eyeRyScale',    label: 'Eye height',   min: 0.3,  max: 1.8,  step: 0.05, fmt: v => Math.round(v*100)+'%' },
-  { key: 'eyeYShift',     label: 'Eye Y shift',  min: -20,  max: 20,   step: 1,    fmt: v => v+'px' },
-  { key: 'lidRest',       label: 'Lid rest',     min: 0,    max: 0.6,  step: 0.01, fmt: v => Math.round(v*100)+'%' },
-  // Brow
-  { key: 'browYOffset',   label: 'Brow Y',       min: -44,  max: -4,   step: 1,    fmt: v => v+'px' },
-  { key: 'browCurve',     label: 'Brow curve',   min: -6,   max: 16,   step: 0.5,  fmt: v => v+'px' },
-  { key: 'browAngle',     label: 'Brow angle',   min: -20,  max: 20,   step: 0.5,  fmt: v => v+'°' },
-  { key: 'browXSpan',     label: 'Brow width',   min: 5,    max: 44,   step: 1,    fmt: v => v+'px' },
-  { key: 'browThickness', label: 'Brow thick',   min: 0.5,  max: 8,    step: 0.25, fmt: v => v+'px' },
-  // Timing
-  { key: 'blinkRateMult', label: 'Blink rate',   min: 0.1,  max: 3,    step: 0.1,  fmt: v => v.toFixed(1)+'×' },
-];
-
-// Transition sliders appended after the emotion param sliders
-const TRANSITION_SCHEMA = [
-  { key: 'transitionDuration', label: 'Duration', min: 50, max: 2000, step: 50, fmt: v => v+'ms' },
+  { key: 'eyeRyScale',    label: 'Eye height',   min: 0.3,  max: 1.8,  step: 0.05, fmt: v => Math.round(v*100)+'%',  group: 'Eye & Lid' },
+  { key: 'eyeYShift',     label: 'Eye Y shift',  min: -20,  max: 20,   step: 1,    fmt: v => v+'px',                 group: 'Eye & Lid' },
+  { key: 'lidRest',       label: 'Lid rest',     min: 0,    max: 0.6,  step: 0.01, fmt: v => Math.round(v*100)+'%',  group: 'Eye & Lid' },
+  { key: 'browYOffset',   label: 'Brow Y',       min: -44,  max: -4,   step: 1,    fmt: v => v+'px',                 group: 'Brow' },
+  { key: 'browCurve',     label: 'Brow curve',   min: -6,   max: 16,   step: 0.5,  fmt: v => v+'px',                 group: 'Brow' },
+  { key: 'browAngle',     label: 'Brow angle',   min: -20,  max: 20,   step: 0.5,  fmt: v => v+'°',                  group: 'Brow' },
+  { key: 'browXSpan',     label: 'Brow width',   min: 5,    max: 44,   step: 1,    fmt: v => v+'px',                 group: 'Brow' },
+  { key: 'browThickness', label: 'Brow thick',   min: 0.5,  max: 8,    step: 0.25, fmt: v => v+'px',                 group: 'Brow' },
+  { key: 'blinkRateMult', label: 'Blink rate',   min: 0.1,  max: 3,    step: 0.1,  fmt: v => v.toFixed(1)+'×',       group: 'Timing' },
 ];
 
 let selectedEmotion = 'neutral';
-const emoSliderRefs = {};  // key → { input, display } for updating on emotion switch
+const emoSliderRefs = {};
 
 function buildEmotionPanel() {
-  const btnWrap = document.getElementById('emo-btns');
+  const btnWrap    = document.getElementById('emo-btns');
   const paramsWrap = document.getElementById('emotion-params');
 
-  // Emotion buttons
+  // Buttons
   window.FACE_EMOTION_NAMES.forEach(name => {
     const btn = document.createElement('button');
     btn.className   = 'emo-btn' + (name === selectedEmotion ? ' active' : '');
@@ -504,186 +567,88 @@ function buildEmotionPanel() {
     btnWrap.appendChild(btn);
   });
 
-  // Section: Eye & Lid
-  addSubLabel(paramsWrap, 'Eye & Lid');
-  EMOTION_PARAM_SCHEMA.slice(0, 3).forEach(s => addEmoSlider(paramsWrap, s));
-
-  // Section: Brow
-  addSubLabel(paramsWrap, 'Brow');
-  EMOTION_PARAM_SCHEMA.slice(3, 8).forEach(s => addEmoSlider(paramsWrap, s));
-
-  // Section: Timing + Transition
-  addSubLabel(paramsWrap, 'Timing & Transition');
-  addEmoSlider(paramsWrap, EMOTION_PARAM_SCHEMA[8]);  // blinkRateMult
-  TRANSITION_SCHEMA.forEach(s => addTransitionSlider(paramsWrap, s));
-
-  // Transition easing dropdown
-  addTransitionSelect(paramsWrap);
-}
-
-function addSubLabel(wrap, text) {
-  const hr = document.createElement('hr');
-  hr.className = 'section-divider';
-  wrap.appendChild(hr);
-  const lbl = document.createElement('div');
-  lbl.className   = 'sub-label';
-  lbl.textContent = text;
-  wrap.appendChild(lbl);
-}
-
-function addEmoSlider(wrap, { key, label, min, max, step, fmt }) {
-  const preset = window.faceConfig.emotions[selectedEmotion];
-  const val    = preset[key];
-
-  const row = document.createElement('div');
-  row.className = 'row';
-
-  const lbl = document.createElement('label');
-  lbl.textContent = label;
-
-  const input = document.createElement('input');
-  input.type  = 'range';
-  input.min   = min; input.max = max; input.step = step;
-  input.value = val;
-
-  const display = document.createElement('span');
-  display.className   = 'val';
-  display.textContent = fmt(val);
-
-  input.addEventListener('input', () => {
-    const n = parseFloat(input.value);
-    window.faceConfig.emotions[selectedEmotion][key] = n;
-    display.textContent = fmt(n);
-    // If this is the active emotion, re-apply so changes show immediately
-    if (window.__faceDebug?.getEmotion() === selectedEmotion) {
-      window.__faceDebug.setEmotion(selectedEmotion);
+  // Params grouped
+  let lastGroup = null;
+  EMOTION_PARAM_SCHEMA.forEach(s => {
+    if (s.group !== lastGroup) {
+      if (lastGroup !== null) { const hr = document.createElement('hr'); hr.className = 'divider'; paramsWrap.appendChild(hr); }
+      const lbl = document.createElement('div'); lbl.className = 'sub-label'; lbl.textContent = s.group;
+      paramsWrap.appendChild(lbl);
+      lastGroup = s.group;
     }
+    const { row, input, display, fmt } = makeSliderRow(
+      s.key, s.label, s.min, s.max, s.step, s.fmt,
+      () => window.faceConfig.emotions[selectedEmotion][s.key],
+      n  => {
+        window.faceConfig.emotions[selectedEmotion][s.key] = n;
+        if (window.__faceDebug?.getEmotion() === selectedEmotion) window.__faceDebug.setEmotion(selectedEmotion);
+      }
+    );
+    emoSliderRefs[s.key] = { input, display, fmt };
+    paramsWrap.appendChild(row);
   });
 
-  emoSliderRefs[key] = { input, display, fmt };
-  row.appendChild(lbl); row.appendChild(input); row.appendChild(display);
-  wrap.appendChild(row);
-}
+  // Transition controls
+  const hr2 = document.createElement('hr'); hr2.className = 'divider'; paramsWrap.appendChild(hr2);
+  const tLbl = document.createElement('div'); tLbl.className = 'sub-label'; tLbl.textContent = 'Transition'; paramsWrap.appendChild(tLbl);
 
-function addTransitionSlider(wrap, { key, label, min, max, step, fmt }) {
-  const val = window.faceConfig[key];
-  const row = document.createElement('div');
-  row.className = 'row';
-  const lbl = document.createElement('label');
-  lbl.textContent = label;
-  const input = document.createElement('input');
-  input.type = 'range'; input.min = min; input.max = max; input.step = step; input.value = val;
-  const display = document.createElement('span');
-  display.className = 'val'; display.textContent = fmt(val);
-  input.addEventListener('input', () => {
-    window.faceConfig[key] = parseFloat(input.value);
-    display.textContent = fmt(parseFloat(input.value));
-  });
-  row.appendChild(lbl); row.appendChild(input); row.appendChild(display);
-  wrap.appendChild(row);
-}
+  const { row: durRow } = makeSliderRow('transitionDuration', 'Duration', 50, 2000, 50,
+    v => v+'ms', () => window.faceConfig.transitionDuration, n => { window.faceConfig.transitionDuration = n; });
+  paramsWrap.appendChild(durRow);
 
-function addTransitionSelect(wrap) {
-  const row = document.createElement('div');
-  row.className = 'row';
-  const lbl = document.createElement('label');
-  lbl.textContent = 'Transition curve';
-  const select = document.createElement('select');
-  Object.keys(window.FACE_EASINGS).forEach(name => {
-    const opt = document.createElement('option');
-    opt.value = name; opt.textContent = name;
-    if (name === window.faceConfig.transitionEasing) opt.selected = true;
-    select.appendChild(opt);
-  });
-  select.addEventListener('change', () => { window.faceConfig.transitionEasing = select.value; });
-  row.appendChild(lbl); row.appendChild(select);
-  wrap.appendChild(row);
+  const easeRow = makeSelectRow('transitionEasing', 'Curve', easingNames,
+    () => window.faceConfig.transitionEasing, v => { window.faceConfig.transitionEasing = v; });
+  paramsWrap.appendChild(easeRow);
 }
 
 function switchEmotion(name) {
-  // Update button states
   document.querySelectorAll('.emo-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('emo-btn-' + name)?.classList.add('active');
-
   selectedEmotion = name;
-
-  // Update all emotion sliders to show this emotion's values
   const preset = window.faceConfig.emotions[name];
   EMOTION_PARAM_SCHEMA.forEach(({ key, fmt }) => {
     const ref = emoSliderRefs[key];
     if (!ref) return;
-    ref.input.value     = preset[key];
+    ref.input.value         = preset[key];
     ref.display.textContent = ref.fmt(preset[key]);
   });
-
-  // Animate to the emotion
   window.__faceDebug?.setEmotion(name);
 }
 
 buildEmotionPanel();
 
-// ── Manual controls ───────────────────────────────────────────────────
-// These reach into face.js's closure via the shared faceConfig object.
-// We manipulate the canvas's internal state by injecting a one-shot override.
+// ── Debug buttons ─────────────────────────────────────────────────────
+function triggerBlink() { window.__faceDebug?.blink(); }
+function lookLeft()     { window.__faceDebug?.look(-window.faceConfig.lookMax); }
+function lookRight()    { window.__faceDebug?.look( window.faceConfig.lookMax); }
+function lookCenter()   { window.__faceDebug?.look(0); }
 
-function triggerBlink() {
-  // Force a blink by setting blinkPhase — face.js reads cfg but owns state.
-  // We can't reach state directly, so just call a helper if exposed.
-  if (window.__faceDebug) window.__faceDebug.blink();
-}
-
-function lookLeft()   { if (window.__faceDebug) window.__faceDebug.look(-window.faceConfig.lookMax); }
-function lookRight()  { if (window.__faceDebug) window.__faceDebug.look( window.faceConfig.lookMax); }
-function lookCenter() { if (window.__faceDebug) window.__faceDebug.look(0); }
-
-// ── Grid overlay ─────────────────────────────────────────────────────
+// ── Grid overlay ──────────────────────────────────────────────────────
 const gridCanvas = document.getElementById('grid-overlay');
 const gridCtx    = gridCanvas.getContext('2d');
 const GW = 240, GH = 282;
 
 function drawGrid() {
   gridCtx.clearRect(0, 0, GW, GH);
-
-  const STEP     = 20;   // grid spacing in canvas pixels
-  const LINE     = 'rgba(255, 255, 255, 0.08)';
-  const CENTER   = 'rgba(255, 100, 100, 0.35)';
-  const THIRD    = 'rgba(100, 160, 255, 0.20)';
-
-  // Regular grid lines
-  gridCtx.strokeStyle = LINE;
+  gridCtx.strokeStyle = 'rgba(255,255,255,0.08)';
   gridCtx.lineWidth   = 0.5;
-  for (let x = 0; x <= GW; x += STEP) {
-    gridCtx.beginPath(); gridCtx.moveTo(x, 0); gridCtx.lineTo(x, GH); gridCtx.stroke();
-  }
-  for (let y = 0; y <= GH; y += STEP) {
-    gridCtx.beginPath(); gridCtx.moveTo(0, y); gridCtx.lineTo(GW, y); gridCtx.stroke();
-  }
-
-  // Rule-of-thirds lines
-  gridCtx.strokeStyle = THIRD;
+  for (let x = 0; x <= GW; x += 20) { gridCtx.beginPath(); gridCtx.moveTo(x,0); gridCtx.lineTo(x,GH); gridCtx.stroke(); }
+  for (let y = 0; y <= GH; y += 20) { gridCtx.beginPath(); gridCtx.moveTo(0,y); gridCtx.lineTo(GW,y); gridCtx.stroke(); }
+  gridCtx.strokeStyle = 'rgba(100,160,255,0.2)';
   gridCtx.lineWidth   = 0.75;
-  [GW / 3, (GW * 2) / 3].forEach(x => {
-    gridCtx.beginPath(); gridCtx.moveTo(x, 0); gridCtx.lineTo(x, GH); gridCtx.stroke();
-  });
-  [GH / 3, (GH * 2) / 3].forEach(y => {
-    gridCtx.beginPath(); gridCtx.moveTo(0, y); gridCtx.lineTo(GW, y); gridCtx.stroke();
-  });
-
-  // Center crosshair
-  gridCtx.strokeStyle = CENTER;
+  [GW/3, GW*2/3].forEach(x => { gridCtx.beginPath(); gridCtx.moveTo(x,0); gridCtx.lineTo(x,GH); gridCtx.stroke(); });
+  [GH/3, GH*2/3].forEach(y => { gridCtx.beginPath(); gridCtx.moveTo(0,y); gridCtx.lineTo(GW,y); gridCtx.stroke(); });
+  gridCtx.strokeStyle = 'rgba(255,100,100,0.35)';
   gridCtx.lineWidth   = 1;
-  gridCtx.beginPath(); gridCtx.moveTo(GW / 2, 0); gridCtx.lineTo(GW / 2, GH); gridCtx.stroke();
-  gridCtx.beginPath(); gridCtx.moveTo(0, GH / 2); gridCtx.lineTo(GW, GH / 2); gridCtx.stroke();
+  gridCtx.beginPath(); gridCtx.moveTo(GW/2,0); gridCtx.lineTo(GW/2,GH); gridCtx.stroke();
+  gridCtx.beginPath(); gridCtx.moveTo(0,GH/2); gridCtx.lineTo(GW,GH/2); gridCtx.stroke();
 }
 
-function setGrid(on) {
-  if (on) drawGrid();
-  else gridCtx.clearRect(0, 0, GW, GH);
-}
+function setGrid(on) { if (on) drawGrid(); else gridCtx.clearRect(0, 0, GW, GH); }
 
 // ── Export ────────────────────────────────────────────────────────────
 function exportConfig() {
-  const out = document.getElementById('export-out');
+  const out  = document.getElementById('export-out');
   const wrap = document.getElementById('export-wrap');
   out.textContent = JSON.stringify(window.faceConfig, null, 2);
   wrap.classList.add('visible');
