@@ -449,6 +449,10 @@
 
     <!-- Export output -->
     <div id="export-wrap">
+      <div style="display:flex; gap:8px; margin-bottom:8px;">
+        <button class="btn" style="flex:1" onclick="copyExport()">Copy to clipboard</button>
+        <button class="btn" style="flex:1" onclick="document.getElementById('export-wrap').classList.remove('visible')">Close</button>
+      </div>
       <div id="export-out"></div>
     </div>
 
@@ -724,6 +728,16 @@ function exportConfig() {
   out.textContent = JSON.stringify(window.faceConfig, null, 2);
   wrap.classList.add('visible');
   out.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function copyExport() {
+  const text = document.getElementById('export-out').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
 }
 
 // ── Load ──────────────────────────────────────────────────────────────
