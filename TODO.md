@@ -20,6 +20,9 @@
 - [ ] Single-file export — inline face.js into index.html so the R1 needs no internet and no second file fetch
 
 ## Polish
+- [ ] Pupils — dark iris/pupil inside each eye
+- [ ] Eyelids — visible upper/lower lid shapes with thickness and color
+- [ ] Mouth — simple arc or line expression that reacts to emotion
 - [ ] Eyelash fringe at lid edge
 - [ ] Subtle eye gloss — small white arc highlight inside eye
 - [ ] Smooth ease-in/out on look transitions (instead of linear)
