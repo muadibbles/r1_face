@@ -1,6 +1,6 @@
 // face.js — R1 Face Character
 // Designed for 240x282 display (Rabbit R1 Creations).
-// v0.028
+// v0.029
 
 // ── Easing functions ─────────────────────────────────────────────────
 window.FACE_EASINGS = {
@@ -280,11 +280,12 @@ window.FACE_EASINGS = {
   }
 
   function drawBrow(side) {
-    // Brow sits above the eye, fixed to face (doesn't move with gaze)
     const ex = CX + side * cfg.eyeSpacing;
     const ey = CY + cfg.eyeOffsetY + emo.live.eyeYShift;
-    const bx = ex;
-    const by = ey + emo.live.browYOffset;
+
+    // Brow travels with the eye (look + tilt)
+    const bx = ex + state.lookX + state.tiltX;
+    const by = ey + emo.live.browYOffset + state.tiltY;
 
     // Angle: inner end raised (pos browAngle) or lowered (neg), mirrored per side
     // side=-1 (left): positive browAngle → left inner raised → rotate clockwise (pos)
@@ -307,7 +308,7 @@ window.FACE_EASINGS = {
     ctx.restore();
   }
 
-  const VERSION = 'v0.028';
+  const VERSION = 'v0.029';
   function drawHUD() {
     ctx.save();
     ctx.font = '11px monospace';

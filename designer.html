@@ -391,6 +391,19 @@
       </div>
     </div>
 
+    <!-- Brow -->
+    <div class="accordion open" id="acc-brow">
+      <button class="acc-header" onclick="toggleAcc('acc-brow')">
+        Brow <span class="chevron">▾</span>
+      </button>
+      <div class="acc-body">
+        <div class="acc-inner">
+          <div class="emo-btns" id="brow-emo-btns"></div>
+          <div id="panel-brow"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Tilt -->
     <div class="accordion" id="acc-tilt">
       <button class="acc-header" onclick="toggleAcc('acc-tilt')">
@@ -422,7 +435,7 @@
 <script>
   window.faceConfig = {};
 </script>
-<script src="face.js?v=0.028"></script>
+<script src="face.js?v=0.029"></script>
 <script>
 
 // ── Accordion ─────────────────────────────────────────────────────────
@@ -539,43 +552,41 @@ COLOR_SCHEMA.forEach(({ key, label, panel }) => {
 
 // ── Emotions panel ────────────────────────────────────────────────────
 const EMOTION_PARAM_SCHEMA = [
-  { key: 'eyeRyScale',    label: 'Eye height',   min: 0.3,  max: 1.8,  step: 0.05, fmt: v => Math.round(v*100)+'%',  group: 'Eye & Lid' },
-  { key: 'eyeYShift',     label: 'Eye Y shift',  min: -20,  max: 20,   step: 1,    fmt: v => v+'px',                 group: 'Eye & Lid' },
-  { key: 'lidRest',       label: 'Lid rest',     min: 0,    max: 0.6,  step: 0.01, fmt: v => Math.round(v*100)+'%',  group: 'Eye & Lid' },
-  { key: 'browYOffset',   label: 'Brow Y',       min: -44,  max: -4,   step: 1,    fmt: v => v+'px',                 group: 'Brow' },
-  { key: 'browCurve',     label: 'Brow curve',   min: -6,   max: 16,   step: 0.5,  fmt: v => v+'px',                 group: 'Brow' },
-  { key: 'browAngle',     label: 'Brow angle',   min: -20,  max: 20,   step: 0.5,  fmt: v => v+'°',                  group: 'Brow' },
-  { key: 'browXSpan',     label: 'Brow width',   min: 5,    max: 44,   step: 1,    fmt: v => v+'px',                 group: 'Brow' },
-  { key: 'browThickness', label: 'Brow thick',   min: 0.5,  max: 8,    step: 0.25, fmt: v => v+'px',                 group: 'Brow' },
-  { key: 'blinkRateMult', label: 'Blink rate',   min: 0.1,  max: 3,    step: 0.1,  fmt: v => v.toFixed(1)+'×',       group: 'Timing' },
+  { key: 'eyeRyScale',    label: 'Eye height',  min: 0.3, max: 1.8, step: 0.05, fmt: v => Math.round(v*100)+'%' },
+  { key: 'eyeYShift',     label: 'Eye Y shift', min: -20, max: 20,  step: 1,    fmt: v => v+'px'                 },
+  { key: 'lidRest',       label: 'Lid rest',    min: 0,   max: 0.6, step: 0.01, fmt: v => Math.round(v*100)+'%' },
+  { key: 'blinkRateMult', label: 'Blink rate',  min: 0.1, max: 3,   step: 0.1,  fmt: v => v.toFixed(1)+'×'      },
+];
+
+const BROW_PARAM_SCHEMA = [
+  { key: 'browYOffset',   label: 'Y Offset',  min: -44, max: -4,  step: 1,    fmt: v => v+'px' },
+  { key: 'browCurve',     label: 'Curve',     min: -6,  max: 16,  step: 0.5,  fmt: v => v+'px' },
+  { key: 'browAngle',     label: 'Angle',     min: -20, max: 20,  step: 0.5,  fmt: v => v+'°'  },
+  { key: 'browXSpan',     label: 'Width',     min: 5,   max: 44,  step: 1,    fmt: v => v+'px' },
+  { key: 'browThickness', label: 'Thickness', min: 0.5, max: 8,   step: 0.25, fmt: v => v+'px' },
 ];
 
 let selectedEmotion = 'neutral';
-const emoSliderRefs = {};
+const emoSliderRefs  = {};  // key → {input, display, fmt} for emotion params
+const browSliderRefs = {};  // key → {input, display, fmt} for brow params
 
-function buildEmotionPanel() {
-  const btnWrap    = document.getElementById('emo-btns');
-  const paramsWrap = document.getElementById('emotion-params');
-
-  // Buttons
+function makeEmoBtns(containerId, prefix) {
+  const wrap = document.getElementById(containerId);
   window.FACE_EMOTION_NAMES.forEach(name => {
     const btn = document.createElement('button');
     btn.className   = 'emo-btn' + (name === selectedEmotion ? ' active' : '');
     btn.textContent = name.charAt(0).toUpperCase() + name.slice(1);
-    btn.id          = 'emo-btn-' + name;
+    btn.id          = prefix + name;
     btn.addEventListener('click', () => switchEmotion(name));
-    btnWrap.appendChild(btn);
+    wrap.appendChild(btn);
   });
+}
 
-  // Params grouped
-  let lastGroup = null;
+function buildEmotionPanel() {
+  makeEmoBtns('emo-btns', 'emo-btn-');
+  const paramsWrap = document.getElementById('emotion-params');
+
   EMOTION_PARAM_SCHEMA.forEach(s => {
-    if (s.group !== lastGroup) {
-      if (lastGroup !== null) { const hr = document.createElement('hr'); hr.className = 'divider'; paramsWrap.appendChild(hr); }
-      const lbl = document.createElement('div'); lbl.className = 'sub-label'; lbl.textContent = s.group;
-      paramsWrap.appendChild(lbl);
-      lastGroup = s.group;
-    }
     const { row, input, display, fmt } = makeSliderRow(
       s.key, s.label, s.min, s.max, s.step, s.fmt,
       () => window.faceConfig.emotions[selectedEmotion][s.key],
@@ -589,33 +600,58 @@ function buildEmotionPanel() {
   });
 
   // Transition controls
-  const hr2 = document.createElement('hr'); hr2.className = 'divider'; paramsWrap.appendChild(hr2);
+  const hr = document.createElement('hr'); hr.className = 'divider'; paramsWrap.appendChild(hr);
   const tLbl = document.createElement('div'); tLbl.className = 'sub-label'; tLbl.textContent = 'Transition'; paramsWrap.appendChild(tLbl);
-
   const { row: durRow } = makeSliderRow('transitionDuration', 'Duration', 50, 2000, 50,
     v => v+'ms', () => window.faceConfig.transitionDuration, n => { window.faceConfig.transitionDuration = n; });
   paramsWrap.appendChild(durRow);
+  paramsWrap.appendChild(makeSelectRow('transitionEasing', 'Curve', easingNames,
+    () => window.faceConfig.transitionEasing, v => { window.faceConfig.transitionEasing = v; }));
+}
 
-  const easeRow = makeSelectRow('transitionEasing', 'Curve', easingNames,
-    () => window.faceConfig.transitionEasing, v => { window.faceConfig.transitionEasing = v; });
-  paramsWrap.appendChild(easeRow);
+function buildBrowPanel() {
+  makeEmoBtns('brow-emo-btns', 'brow-btn-');
+  const wrap = document.getElementById('panel-brow');
+
+  BROW_PARAM_SCHEMA.forEach(s => {
+    const { row, input, display, fmt } = makeSliderRow(
+      s.key, s.label, s.min, s.max, s.step, s.fmt,
+      () => window.faceConfig.emotions[selectedEmotion][s.key],
+      n  => {
+        window.faceConfig.emotions[selectedEmotion][s.key] = n;
+        if (window.__faceDebug?.getEmotion() === selectedEmotion) window.__faceDebug.setEmotion(selectedEmotion);
+      }
+    );
+    browSliderRefs[s.key] = { input, display, fmt };
+    wrap.appendChild(row);
+  });
 }
 
 function switchEmotion(name) {
+  // Update all emotion button sets
   document.querySelectorAll('.emo-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('emo-btn-' + name)?.classList.add('active');
+  document.querySelectorAll('#emo-btn-' + name + ', #brow-btn-' + name).forEach(b => b.classList.add('active'));
+
   selectedEmotion = name;
   const preset = window.faceConfig.emotions[name];
-  EMOTION_PARAM_SCHEMA.forEach(({ key, fmt }) => {
+
+  // Sync emotion sliders
+  EMOTION_PARAM_SCHEMA.forEach(({ key }) => {
     const ref = emoSliderRefs[key];
-    if (!ref) return;
-    ref.input.value         = preset[key];
-    ref.display.textContent = ref.fmt(preset[key]);
+    if (ref) { ref.input.value = preset[key]; ref.display.textContent = ref.fmt(preset[key]); }
   });
+
+  // Sync brow sliders
+  BROW_PARAM_SCHEMA.forEach(({ key }) => {
+    const ref = browSliderRefs[key];
+    if (ref) { ref.input.value = preset[key]; ref.display.textContent = ref.fmt(preset[key]); }
+  });
+
   window.__faceDebug?.setEmotion(name);
 }
 
 buildEmotionPanel();
+buildBrowPanel();
 
 // ── Debug buttons ─────────────────────────────────────────────────────
 function triggerBlink() { window.__faceDebug?.blink(); }
