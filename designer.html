@@ -364,6 +364,7 @@
 
     <div style="margin-top: auto; width: 100%; display: flex; flex-direction: column; gap: 6px;">
       <button class="btn primary" onclick="exportConfig()">Export config JSON</button>
+      <button class="btn primary" onclick="exportIndexHtml()">Export index.html</button>
       <button class="btn primary" onclick="toggleLoadPanel()">Load config JSON</button>
     </div>
   </div>
@@ -753,6 +754,35 @@ function pasteBrow() {
   });
   // Re-apply to face if active
   if (window.__faceDebug?.getEmotion() === selectedEmotion) window.__faceDebug.setEmotion(selectedEmotion);
+}
+
+// ── Export index.html ─────────────────────────────────────────────────
+async function exportIndexHtml() {
+  const btn = event.target;
+  const orig = btn.textContent;
+  btn.textContent = 'Building…';
+  btn.disabled = true;
+
+  try {
+    const res  = await fetch('index.html');
+    const html = await res.text();
+
+    const inject = `<script>\n  window.faceConfig = ${JSON.stringify(window.faceConfig, null, 2)};\n<\/script>\n`;
+    const patched = html.replace(/(<script\s[^>]*face\.js[^>]*><\/script>)/, inject + '$1');
+
+    const blob = new Blob([patched], { type: 'text/html' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'index.html';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('Export failed: ' + e.message);
+  } finally {
+    btn.textContent = orig;
+    btn.disabled = false;
+  }
 }
 
 // ── Export ────────────────────────────────────────────────────────────
