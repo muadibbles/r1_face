@@ -435,7 +435,7 @@
 <script>
   window.faceConfig = {};
 </script>
-<script src="face.js?v=0.029"></script>
+<script src="face.js?v=0.030"></script>
 <script>
 
 // ── Accordion ─────────────────────────────────────────────────────────
@@ -560,6 +560,7 @@ const EMOTION_PARAM_SCHEMA = [
 
 const BROW_PARAM_SCHEMA = [
   { key: 'browYOffset',   label: 'Y Offset',  min: -44, max: -4,  step: 1,    fmt: v => v+'px' },
+  { key: 'browSpacing',   label: 'Spacing',   min: -20, max: 30,  step: 1,    fmt: v => v+'px' },
   { key: 'browCurve',     label: 'Curve',     min: -6,  max: 16,  step: 0.5,  fmt: v => v+'px' },
   { key: 'browAngle',     label: 'Angle',     min: -20, max: 20,  step: 0.5,  fmt: v => v+'°'  },
   { key: 'browXSpan',     label: 'Width',     min: 5,   max: 44,  step: 1,    fmt: v => v+'px' },

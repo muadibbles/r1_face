@@ -1,6 +1,6 @@
 // face.js — R1 Face Character
 // Designed for 240x282 display (Rabbit R1 Creations).
-// v0.029
+// v0.030
 
 // ── Easing functions ─────────────────────────────────────────────────
 window.FACE_EASINGS = {
@@ -42,32 +42,32 @@ window.FACE_EASINGS = {
   const EMOTION_DEFAULTS = {
     neutral: {
       eyeRyScale: 1.0, eyeYShift: 0,  lidRest: 0,
-      browYOffset: -16, browCurve: 3,  browAngle: 0,   browXSpan: 20, browThickness: 2.5,
+      browYOffset: -16, browCurve: 3,  browAngle: 0,   browXSpan: 20, browSpacing: 0, browThickness: 2.5,
       blinkRateMult: 1.0,
     },
     attentive: {
       eyeRyScale: 1.15, eyeYShift: -2, lidRest: 0,
-      browYOffset: -19, browCurve: 2,  browAngle: -2,  browXSpan: 20, browThickness: 2.5,
+      browYOffset: -19, browCurve: 2,  browAngle: -2,  browXSpan: 20, browSpacing: 0, browThickness: 2.5,
       blinkRateMult: 0.35,
     },
     happy: {
       eyeRyScale: 0.7,  eyeYShift: -1, lidRest: 0.22,
-      browYOffset: -20, browCurve: 6,  browAngle: 0,   browXSpan: 21, browThickness: 2.5,
+      browYOffset: -20, browCurve: 6,  browAngle: 0,   browXSpan: 21, browSpacing: 0, browThickness: 2.5,
       blinkRateMult: 0.8,
     },
     surprised: {
       eyeRyScale: 1.35, eyeYShift: -4, lidRest: 0,
-      browYOffset: -24, browCurve: 5,  browAngle: 0,   browXSpan: 22, browThickness: 2.5,
+      browYOffset: -24, browCurve: 5,  browAngle: 0,   browXSpan: 22, browSpacing: 2, browThickness: 2.5,
       blinkRateMult: 0.2,
     },
     thinking: {
       eyeRyScale: 0.88, eyeYShift: 0,  lidRest: 0.08,
-      browYOffset: -15, browCurve: 1,  browAngle: 4,   browXSpan: 19, browThickness: 2.5,
+      browYOffset: -15, browCurve: 1,  browAngle: 4,   browXSpan: 19, browSpacing: 0, browThickness: 2.5,
       blinkRateMult: 1.6,
     },
     tired: {
       eyeRyScale: 0.75, eyeYShift: 3,  lidRest: 0.28,
-      browYOffset: -12, browCurve: 2,  browAngle: 3,   browXSpan: 20, browThickness: 2.0,
+      browYOffset: -12, browCurve: 2,  browAngle: 3,   browXSpan: 20, browSpacing: 0, browThickness: 2.0,
       blinkRateMult: 1.9,
     },
   };
@@ -283,8 +283,8 @@ window.FACE_EASINGS = {
     const ex = CX + side * cfg.eyeSpacing;
     const ey = CY + cfg.eyeOffsetY + emo.live.eyeYShift;
 
-    // Brow travels with the eye (look + tilt)
-    const bx = ex + state.lookX + state.tiltX;
+    // Brow travels with the eye (look + tilt); spacing pushes outward from center
+    const bx = ex + side * emo.live.browSpacing + state.lookX + state.tiltX;
     const by = ey + emo.live.browYOffset + state.tiltY;
 
     // Angle: inner end raised (pos browAngle) or lowered (neg), mirrored per side
@@ -308,7 +308,7 @@ window.FACE_EASINGS = {
     ctx.restore();
   }
 
-  const VERSION = 'v0.029';
+  const VERSION = 'v0.030';
   function drawHUD() {
     ctx.save();
     ctx.font = '11px monospace';
