@@ -488,7 +488,7 @@
     }
   } catch (e) { /* no baked config — face.js will use defaults */ }
 </script>
-<script src="face.js?v=0.031"></script>
+<script src="face.js?v=0.032"></script>
 <script>
 
 // ── Accordion ─────────────────────────────────────────────────────────
@@ -612,12 +612,14 @@ const EMOTION_PARAM_SCHEMA = [
 ];
 
 const BROW_PARAM_SCHEMA = [
-  { key: 'browYOffset',   label: 'Y Offset',  min: -80, max: 40,  step: 1,    fmt: v => v+'px' },
-  { key: 'browSpacing',   label: 'Spacing',   min: -20, max: 30,  step: 1,    fmt: v => v+'px' },
-  { key: 'browCurve',     label: 'Curve',     min: -6,  max: 16,  step: 0.5,  fmt: v => v+'px' },
-  { key: 'browAngle',     label: 'Angle',     min: -20, max: 20,  step: 0.5,  fmt: v => v+'°'  },
-  { key: 'browXSpan',     label: 'Width',     min: 5,   max: 44,  step: 1,    fmt: v => v+'px' },
-  { key: 'browThickness', label: 'Thickness', min: 0.5, max: 8,   step: 0.25, fmt: v => v+'px' },
+  { key: 'browYOffsetL',  label: 'Y Offset L', min: -80, max: 40,  step: 1,    fmt: v => v+'px' },
+  { key: 'browYOffsetR',  label: 'Y Offset R', min: -80, max: 40,  step: 1,    fmt: v => v+'px' },
+  { key: 'browSpacing',   label: 'Spacing',    min: -20, max: 30,  step: 1,    fmt: v => v+'px' },
+  { key: 'browCurveL',    label: 'Curve L',    min: -6,  max: 16,  step: 0.5,  fmt: v => v+'px' },
+  { key: 'browCurveR',    label: 'Curve R',    min: -6,  max: 16,  step: 0.5,  fmt: v => v+'px' },
+  { key: 'browAngle',     label: 'Angle',      min: -20, max: 20,  step: 0.5,  fmt: v => v+'°'  },
+  { key: 'browXSpan',     label: 'Width',      min: 5,   max: 44,  step: 1,    fmt: v => v+'px' },
+  { key: 'browThickness', label: 'Thickness',  min: 0.5, max: 8,   step: 0.25, fmt: v => v+'px' },
 ];
 
 let selectedEmotion = 'neutral';
@@ -769,7 +771,7 @@ function drawGrid() {
 function setGrid(on) { if (on) drawGrid(); else gridCtx.clearRect(0, 0, GW, GH); }
 
 // ── Brow copy / paste ─────────────────────────────────────────────────
-const BROW_KEYS = ['browYOffset', 'browSpacing', 'browCurve', 'browAngle', 'browXSpan', 'browThickness'];
+const BROW_KEYS = ['browYOffsetL', 'browYOffsetR', 'browSpacing', 'browCurveL', 'browCurveR', 'browAngle', 'browXSpan', 'browThickness'];
 let browClipboard = null;
 
 function copyBrow() {

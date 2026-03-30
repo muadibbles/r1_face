@@ -1,6 +1,6 @@
 // face.js — R1 Face Character
 // Designed for 240x282 display (Rabbit R1 Creations).
-// v0.031
+// v0.032
 
 // ── Easing functions ─────────────────────────────────────────────────
 window.FACE_EASINGS = {
@@ -42,32 +42,38 @@ window.FACE_EASINGS = {
   const EMOTION_DEFAULTS = {
     neutral: {
       eyeRyScale: 1.0, eyeYShift: 0,  lidRest: 0,
-      browYOffset: -16, browCurve: 3,  browAngle: 0,   browXSpan: 20, browSpacing: 0, browThickness: 2.5,
+      browYOffsetL: -16, browYOffsetR: -16, browCurveL: 3, browCurveR: 3,
+      browAngle: 0,   browXSpan: 20, browSpacing: 0, browThickness: 2.5,
       blinkRateMult: 1.0,
     },
     attentive: {
       eyeRyScale: 1.15, eyeYShift: -2, lidRest: 0,
-      browYOffset: -19, browCurve: 2,  browAngle: -2,  browXSpan: 20, browSpacing: 0, browThickness: 2.5,
+      browYOffsetL: -19, browYOffsetR: -19, browCurveL: 2, browCurveR: 2,
+      browAngle: -2,  browXSpan: 20, browSpacing: 0, browThickness: 2.5,
       blinkRateMult: 0.35,
     },
     happy: {
       eyeRyScale: 0.7,  eyeYShift: -1, lidRest: 0.22,
-      browYOffset: -20, browCurve: 6,  browAngle: 0,   browXSpan: 21, browSpacing: 0, browThickness: 2.5,
+      browYOffsetL: -20, browYOffsetR: -20, browCurveL: 6, browCurveR: 6,
+      browAngle: 0,   browXSpan: 21, browSpacing: 0, browThickness: 2.5,
       blinkRateMult: 0.8,
     },
     surprised: {
       eyeRyScale: 1.35, eyeYShift: -4, lidRest: 0,
-      browYOffset: -24, browCurve: 5,  browAngle: 0,   browXSpan: 22, browSpacing: 2, browThickness: 2.5,
+      browYOffsetL: -24, browYOffsetR: -24, browCurveL: 5, browCurveR: 5,
+      browAngle: 0,   browXSpan: 22, browSpacing: 2, browThickness: 2.5,
       blinkRateMult: 0.2,
     },
     thinking: {
       eyeRyScale: 0.88, eyeYShift: 0,  lidRest: 0.08,
-      browYOffset: -15, browCurve: 1,  browAngle: 4,   browXSpan: 19, browSpacing: 0, browThickness: 2.5,
+      browYOffsetL: -15, browYOffsetR: -15, browCurveL: 1, browCurveR: 1,
+      browAngle: 4,   browXSpan: 19, browSpacing: 0, browThickness: 2.5,
       blinkRateMult: 1.6,
     },
     tired: {
       eyeRyScale: 0.75, eyeYShift: 3,  lidRest: 0.28,
-      browYOffset: -12, browCurve: 2,  browAngle: 3,   browXSpan: 20, browSpacing: 0, browThickness: 2.0,
+      browYOffsetL: -12, browYOffsetR: -12, browCurveL: 2, browCurveR: 2,
+      browAngle: 3,   browXSpan: 20, browSpacing: 0, browThickness: 2.0,
       blinkRateMult: 1.9,
     },
   };
@@ -123,6 +129,16 @@ window.FACE_EASINGS = {
   // Ensure emotions always has all presets (fill any missing from defaults)
   for (const name of window.FACE_EMOTION_NAMES) {
     cfg.emotions[name] = Object.assign({}, EMOTION_DEFAULTS[name], cfg.emotions[name] || {});
+    // Migrate old single browYOffset/browCurve to per-side L/R keys
+    const e = cfg.emotions[name];
+    if (e.browYOffset !== undefined && e.browYOffsetL === undefined) {
+      e.browYOffsetL = e.browYOffset; e.browYOffsetR = e.browYOffset;
+      delete e.browYOffset;
+    }
+    if (e.browCurve !== undefined && e.browCurveL === undefined) {
+      e.browCurveL = e.browCurve; e.browCurveR = e.browCurve;
+      delete e.browCurve;
+    }
   }
 
   // Ensure blinkProfiles array is always present (safe after config merge)
@@ -292,17 +308,25 @@ window.FACE_EASINGS = {
     const ex = CX + side * cfg.eyeSpacing;
     const ey = CY + cfg.eyeOffsetY + emo.live.eyeYShift;
 
-    // Brow travels with the eye (look + tilt); spacing pushes outward from center
-    const bx = ex + side * emo.live.browSpacing + state.lookX + state.tiltX;
-    const by = ey + emo.live.browYOffset + state.tiltY;
+    // Eye tilt angle — brow position and rotation follow this
+    const tilt = side * cfg.eyeTilt * Math.PI / 180;
 
-    // Angle: inner end raised (pos browAngle) or lowered (neg), mirrored per side
-    // side=-1 (left): positive browAngle → left inner raised → rotate clockwise (pos)
-    // side=+1 (right): positive browAngle → right inner raised → rotate counter-clockwise (neg)
-    const angle = -side * emo.live.browAngle * Math.PI / 180;
+    // Per-side brow params
+    const browYOffset = side === -1 ? emo.live.browYOffsetL : emo.live.browYOffsetR;
+    const curve       = side === -1 ? emo.live.browCurveL   : emo.live.browCurveR;
 
-    const span  = emo.live.browXSpan;
-    const curve = emo.live.browCurve;
+    // Compute brow anchor in eye-local space, then rotate into canvas space
+    // so the brow stays "above the eye" even as the eye tilts
+    const localX = side * emo.live.browSpacing;
+    const localY = browYOffset;
+    const cosT = Math.cos(tilt), sinT = Math.sin(tilt);
+    const bx = ex + (localX * cosT - localY * sinT) + state.lookX + state.tiltX;
+    const by = ey + (localX * sinT + localY * cosT) + state.tiltY;
+
+    // Brow's own angle adds on top of the eye tilt
+    const angle = tilt + (-side * emo.live.browAngle * Math.PI / 180);
+
+    const span = emo.live.browXSpan;
 
     ctx.save();
     ctx.translate(bx, by);
@@ -317,7 +341,7 @@ window.FACE_EASINGS = {
     ctx.restore();
   }
 
-  const VERSION = 'v0.031';
+  const VERSION = 'v0.032';
   function drawHUD() {
     ctx.save();
     ctx.font = '11px monospace';
