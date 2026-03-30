@@ -20,6 +20,109 @@
 </head>
 <body>
   <canvas id="face" width="240" height="282"></canvas>
-  <script src="face.js?v=0.030"></script>
+  <script>
+  window.faceConfig = {
+  "eyeRx": 24,
+  "eyeRy": 27,
+  "eyeSpacing": 40,
+  "eyeOffsetY": 0,
+  "eyeTilt": 10,
+  "blinkWaitMin": 2500,
+  "blinkWaitMax": 5500,
+  "blinkCloseEasing": "Ease In",
+  "blinkOpenEasing": "Ease Out",
+  "lookMax": 20,
+  "lookDurationMin": 150,
+  "lookDurationMax": 600,
+  "lookWaitMin": 800,
+  "lookWaitMax": 3000,
+  "lookHoldMin": 400,
+  "lookHoldMax": 2200,
+  "lookEasing": "Ease Out Cubic",
+  "tiltMaxX": 28,
+  "tiltMaxY": 18,
+  "tiltSmooth": 0.25,
+  "bgColor": "#0d0d14",
+  "eyeColor": "#ffffff",
+  "browColor": "#ffffff",
+  "transitionDuration": 300,
+  "transitionEasing": "Ease In-Out",
+  "emotions": {
+    "neutral": {
+      "eyeRyScale": 1,
+      "eyeYShift": 0,
+      "lidRest": 0,
+      "browYOffset": -35,
+      "browCurve": 3.5,
+      "browAngle": -7.5,
+      "browXSpan": 15,
+      "browSpacing": 6,
+      "browThickness": 2.5,
+      "blinkRateMult": 1
+    },
+    "attentive": {
+      "eyeRyScale": 1.15,
+      "eyeYShift": -2,
+      "lidRest": 0,
+      "browYOffset": -46,
+      "browCurve": 9,
+      "browAngle": -7.5,
+      "browXSpan": 15,
+      "browSpacing": 6,
+      "browThickness": 2.5,
+      "blinkRateMult": 0.35
+    },
+    "happy": {
+      "eyeRyScale": 1.35,
+      "eyeYShift": -1,
+      "lidRest": 0.22,
+      "browYOffset": -42,
+      "browCurve": 9,
+      "browAngle": -9.5,
+      "browXSpan": 15,
+      "browSpacing": 6,
+      "browThickness": 2.5,
+      "blinkRateMult": 0.8
+    },
+    "surprised": {
+      "eyeRyScale": 1.35,
+      "eyeYShift": -4,
+      "lidRest": 0,
+      "browYOffset": -63,
+      "browCurve": 11,
+      "browAngle": -10,
+      "browXSpan": 13,
+      "browSpacing": 12,
+      "browThickness": 2.5,
+      "blinkRateMult": 0.2
+    },
+    "thinking": {
+      "eyeRyScale": 0.88,
+      "eyeYShift": 0,
+      "lidRest": 0.08,
+      "browYOffset": -32,
+      "browCurve": 9,
+      "browAngle": -7.5,
+      "browXSpan": 15,
+      "browSpacing": 3,
+      "browThickness": 2.5,
+      "blinkRateMult": 1.6
+    },
+    "tired": {
+      "eyeRyScale": 0.75,
+      "eyeYShift": 3,
+      "lidRest": 0.28,
+      "browYOffset": -21,
+      "browCurve": 5,
+      "browAngle": -19.5,
+      "browXSpan": 15,
+      "browSpacing": 8,
+      "browThickness": 2.5,
+      "blinkRateMult": 1.9
+    }
+  }
+};
+</script>
+<script src="face.js?v=0.030"></script>
 </body>
 </html>
