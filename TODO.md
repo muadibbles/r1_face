@@ -10,6 +10,12 @@
 - [ ] Asymmetric blinks — one eye slightly behind the other (~20ms), feels more organic
 - [ ] Tired mode — eyelids rest at ~15% closed, slower blinks
 
+## Native Android App (beyond Creations)
+- [ ] Research ADB access / sideloading on R1 (community guides on r/rabbitr1)
+- [ ] Camera face tracking — Camera2 + ML Kit head-pose → drive eye look target
+- [ ] Scroll wheel input — read as Android MotionEvent or WebView wheel event
+- [ ] Bridge native sensor data into face WebView via evaluateJavascript
+
 ## Reactivity
 - [x] Eye darts / look-around idle
 - [x] Accelerometer — tilt device, eyes dart in that direction
