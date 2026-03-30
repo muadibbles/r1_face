@@ -1,6 +1,6 @@
 // face.js — R1 Face Character
 // Designed for 240x282 display (Rabbit R1 Creations).
-// v0.030
+// v0.031
 
 // ── Easing functions ─────────────────────────────────────────────────
 window.FACE_EASINGS = {
@@ -88,6 +88,13 @@ window.FACE_EASINGS = {
     blinkCloseEasing: 'Ease In',
     blinkOpenEasing:  'Ease Out',
 
+    // Three blink speed profiles — randomly selected each blink
+    blinkProfiles: [
+      { close: 45,  hold: 30,  open: 70  },   // quick
+      { close: 72,  hold: 52,  open: 115 },   // normal
+      { close: 130, hold: 100, open: 180 },   // slow
+    ],
+
     lookMax:         20,
     lookDurationMin: 150,
     lookDurationMax: 600,
@@ -118,12 +125,14 @@ window.FACE_EASINGS = {
     cfg.emotions[name] = Object.assign({}, EMOTION_DEFAULTS[name], cfg.emotions[name] || {});
   }
 
-  // ── Blink profiles ───────────────────────────────────────────────────
-  const BLINK_TYPES = [
-    { close: 45,  hold: 30,  open: 70  },
-    { close: 72,  hold: 52,  open: 115 },
-    { close: 130, hold: 100, open: 180 },
-  ];
+  // Ensure blinkProfiles array is always present (safe after config merge)
+  if (!Array.isArray(cfg.blinkProfiles) || cfg.blinkProfiles.length === 0) {
+    cfg.blinkProfiles = [
+      { close: 45,  hold: 30,  open: 70  },
+      { close: 72,  hold: 52,  open: 115 },
+      { close: 130, hold: 100, open: 180 },
+    ];
+  }
 
   // ── Emotion state ────────────────────────────────────────────────────
   const emo = {
@@ -204,7 +213,7 @@ window.FACE_EASINGS = {
       case 'idle':
         state.blinkWait -= dt;
         if (state.blinkWait <= 0) {
-          state.blinkType  = BLINK_TYPES[randInt(0, BLINK_TYPES.length - 1)];
+          state.blinkType  = cfg.blinkProfiles[randInt(0, cfg.blinkProfiles.length - 1)];
           state.blinkRaw   = 0;
           state.blinkPhase = 'closing';
         }
@@ -308,7 +317,7 @@ window.FACE_EASINGS = {
     ctx.restore();
   }
 
-  const VERSION = 'v0.030';
+  const VERSION = 'v0.031';
   function drawHUD() {
     ctx.save();
     ctx.font = '11px monospace';
@@ -326,7 +335,7 @@ window.FACE_EASINGS = {
   // ── Debug / API hooks ────────────────────────────────────────────────
   window.__faceDebug = {
     blink() {
-      state.blinkType  = BLINK_TYPES[1];
+      state.blinkType  = cfg.blinkProfiles[1];
       state.blinkRaw   = 0;
       state.blinkPhase = 'closing';
       state.blink      = 0;

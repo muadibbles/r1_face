@@ -488,7 +488,7 @@
     }
   } catch (e) { /* no baked config — face.js will use defaults */ }
 </script>
-<script src="face.js?v=0.030"></script>
+<script src="face.js?v=0.031"></script>
 <script>
 
 // ── Accordion ─────────────────────────────────────────────────────────
@@ -704,8 +704,40 @@ function switchEmotion(name) {
   window.__faceDebug?.setEmotion(name);
 }
 
+// ── Blink profiles panel ──────────────────────────────────────────────
+const PROFILE_LABELS = ['Quick', 'Normal', 'Slow'];
+
+function buildBlinkProfiles() {
+  const panel = document.getElementById('panel-blink');
+
+  const hr = document.createElement('hr'); hr.className = 'divider'; panel.appendChild(hr);
+  const lbl = document.createElement('div'); lbl.className = 'sub-label'; lbl.textContent = 'Speed profiles'; panel.appendChild(lbl);
+
+  const profileFields = [
+    { key: 'close', label: 'Close', fmt: v => v + 'ms', min: 10, max: 400, step: 5 },
+    { key: 'hold',  label: 'Hold',  fmt: v => v + 'ms', min: 0,  max: 300, step: 5 },
+    { key: 'open',  label: 'Open',  fmt: v => v + 'ms', min: 10, max: 500, step: 5 },
+  ];
+
+  window.faceConfig.blinkProfiles.forEach((profile, i) => {
+    const pLbl = document.createElement('div'); pLbl.className = 'sub-label';
+    pLbl.textContent = 'Profile ' + (i + 1) + ' — ' + PROFILE_LABELS[i];
+    panel.appendChild(pLbl);
+
+    profileFields.forEach(({ key, label, fmt, min, max, step }) => {
+      const { row } = makeSliderRow(
+        'blinkProfiles.' + i + '.' + key, label, min, max, step, fmt,
+        () => window.faceConfig.blinkProfiles[i][key],
+        n  => { window.faceConfig.blinkProfiles[i][key] = n; }
+      );
+      panel.appendChild(row);
+    });
+  });
+}
+
 buildEmotionPanel();
 buildBrowPanel();
+buildBlinkProfiles();
 
 // ── Debug buttons ─────────────────────────────────────────────────────
 function triggerBlink() { window.__faceDebug?.blink(); }
@@ -842,6 +874,9 @@ function applyLoadedConfig() {
   if (parsed.emotions) {
     window.faceConfig.emotions = window.faceConfig.emotions || {};
     Object.assign(window.faceConfig.emotions, parsed.emotions);
+  }
+  if (Array.isArray(parsed.blinkProfiles)) {
+    window.faceConfig.blinkProfiles = parsed.blinkProfiles;
   }
 
   // Refresh all registered inputs
