@@ -26,6 +26,8 @@
 - [ ] Single-file export — inline face.js into index.html so the R1 needs no internet and no second file fetch
 
 ## Polish
+- [ ] Move voice status dots to upper right corner of HUD
+- [ ] Brows dip slightly during blink (~10px) to feel attached to the same skin as the eyes
 - [ ] Pupils — dark iris/pupil inside each eye
 - [ ] Eyelids — visible upper/lower lid shapes with thickness and color
 - [ ] Mouth — simple arc or line expression that reacts to emotion
