@@ -313,25 +313,31 @@ window.FACE_EASINGS = {
       voiceState = 'idle';
     }
 
-    // Look
-    switch (state.lookPhase) {
-      case 'idle':
-        state.lookWait -= dt;
-        if (state.lookWait <= 0) { newLookTarget(); state.lookPhase = 'moving'; }
-        break;
-      case 'moving':
-        state.lookT = Math.min(1, state.lookT + dt / state.lookDuration);
-        state.lookX = lerp(state.lookStartX, state.lookTargetX, applyEase(cfg.lookEasing, state.lookT));
-        if (state.lookT >= 1) {
-          state.lookX = state.lookTargetX;
-          state.lookPhase = 'hold';
-          state.lookHold  = rand(cfg.lookHoldMin, cfg.lookHoldMax);
-        }
-        break;
-      case 'hold':
-        state.lookHold -= dt;
-        if (state.lookHold <= 0) { state.lookPhase = 'idle'; state.lookWait = rand(cfg.lookWaitMin, cfg.lookWaitMax); }
-        break;
+    // Look — suspended while speaking (eyes drift back to center)
+    if (voiceState === 'speaking') {
+      state.lookX     += (0 - state.lookX) * Math.min(1, dt * 0.008);
+      state.lookPhase  = 'idle';
+      state.lookWait   = rand(cfg.lookWaitMin, cfg.lookWaitMax);
+    } else {
+      switch (state.lookPhase) {
+        case 'idle':
+          state.lookWait -= dt;
+          if (state.lookWait <= 0) { newLookTarget(); state.lookPhase = 'moving'; }
+          break;
+        case 'moving':
+          state.lookT = Math.min(1, state.lookT + dt / state.lookDuration);
+          state.lookX = lerp(state.lookStartX, state.lookTargetX, applyEase(cfg.lookEasing, state.lookT));
+          if (state.lookT >= 1) {
+            state.lookX = state.lookTargetX;
+            state.lookPhase = 'hold';
+            state.lookHold  = rand(cfg.lookHoldMin, cfg.lookHoldMax);
+          }
+          break;
+        case 'hold':
+          state.lookHold -= dt;
+          if (state.lookHold <= 0) { state.lookPhase = 'idle'; state.lookWait = rand(cfg.lookWaitMin, cfg.lookWaitMax); }
+          break;
+      }
     }
   }
 
