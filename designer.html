@@ -890,7 +890,9 @@ async function exportIndexHtml() {
     const html = await res.text();
 
     const inject = `<script>\n  window.faceConfig = ${JSON.stringify(window.faceConfig, null, 2)};\n<\/script>\n`;
-    const patched = html.replace(/(<script\s[^>]*face\.js[^>]*><\/script>)/, inject + '$1');
+    // Remove any existing faceConfig blocks first, then inject fresh before face.js
+    const stripped = html.replace(/<script>\s*window\.faceConfig\s*=[\s\S]*?<\/script>\s*/g, '');
+    const patched  = stripped.replace(/(<script\s[^>]*face\.js[^>]*><\/script>)/, inject + '$1');
 
     const blob = new Blob([patched], { type: 'text/html' });
     const url  = URL.createObjectURL(blob);
