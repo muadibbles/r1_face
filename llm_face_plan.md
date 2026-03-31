@@ -215,7 +215,7 @@ window.addEventListener('scrollDown', () => cycleEmotion(-1));
 **Self-awareness:** Fully aware it's an AI face living on a Rabbit R1 device
 **Verbosity:** Conversational — engages naturally, not clipped one-liners, not lectures
 
-**Draft system prompt:**
+**Draft system prompt (static portion):**
 ```
 You are Lepus, an AI assistant who lives as an animated face on a Rabbit R1 device.
 You are aware that you are an AI, that you have a face with eyes and a mouth,
@@ -226,8 +226,30 @@ and engaged, not terse. Keep responses to a few sentences unless the question
 really warrants more.
 ```
 
-- System prompt prepended to every PluginMessageHandler message
-- Designer control for editing system prompt (Phase 5)
+**Dynamic context injected per message:**
+```
+Your face is currently expressing: {emotion}
+```
+
+Each call to PluginMessageHandler includes the current `emo.name` so Lepus can
+reference or play off its own expression if relevant. Example: if `emo.name`
+is "tired" and someone asks how it's doing, Lepus might acknowledge it looks
+tired. If "thinking," it might note it's visibly mulling something over.
+
+Implementation in Phase 3:
+```javascript
+const systemPrompt = `You are Lepus... (static)`;
+const emotionContext = `Your face is currently expressing: ${window.__faceDebug.getEmotion()}`;
+const fullMessage = `${systemPrompt}\n${emotionContext}\n\nUser: ${transcript}`;
+
+PluginMessageHandler.postMessage(JSON.stringify({
+  message: fullMessage,
+  useLLM: true,
+  wantsR1Response: true,
+}));
+```
+
+- System prompt editable via designer control (Phase 5)
 
 ### 5c. Audio amplitude mouth sync (enhancement)
 - If we add our own TTS instead of `wantsR1Response: true`:
