@@ -50,14 +50,14 @@ window.FACE_EASINGS = {
       browYOffsetL: -16, browYOffsetR: -16, browCurveL: 3, browCurveR: 3,
       browAngle: 0,   browXSpan: 20, browSpacing: 0, browThickness: 2.5,
       blinkRateMult: 1.0,
-      mouthY: 40, mouthWidth: 18, mouthCurve: 2, mouthThickness: 0, mouthOpenMax: 12,
+      mouthY: 40, mouthWidth: 18, mouthCurve: 2, mouthThickness: 3, mouthOpenMax: 12,
     },
     attentive: {
       eyeRyScale: 1.15, eyeYShift: -2, lidRest: 0,
       browYOffsetL: -19, browYOffsetR: -19, browCurveL: 2, browCurveR: 2,
       browAngle: -2,  browXSpan: 20, browSpacing: 0, browThickness: 2.5,
       blinkRateMult: 0.35,
-      mouthY: 40, mouthWidth: 18, mouthCurve: 1, mouthThickness: 0, mouthOpenMax: 12,
+      mouthY: 40, mouthWidth: 18, mouthCurve: 1, mouthThickness: 3, mouthOpenMax: 12,
     },
     happy: {
       eyeRyScale: 0.7,  eyeYShift: -1, lidRest: 0.22,
@@ -78,14 +78,14 @@ window.FACE_EASINGS = {
       browYOffsetL: -15, browYOffsetR: -15, browCurveL: 1, browCurveR: 1,
       browAngle: 4,   browXSpan: 19, browSpacing: 0, browThickness: 2.5,
       blinkRateMult: 1.6,
-      mouthY: 40, mouthWidth: 14, mouthCurve: 0, mouthThickness: 0, mouthOpenMax: 8,
+      mouthY: 40, mouthWidth: 14, mouthCurve: 0, mouthThickness: 3, mouthOpenMax: 8,
     },
     tired: {
       eyeRyScale: 0.75, eyeYShift: 3,  lidRest: 0.28,
       browYOffsetL: -12, browYOffsetR: -12, browCurveL: 2, browCurveR: 2,
       browAngle: 3,   browXSpan: 20, browSpacing: 0, browThickness: 2.0,
       blinkRateMult: 1.9,
-      mouthY: 42, mouthWidth: 16, mouthCurve: -2, mouthThickness: 0, mouthOpenMax: 8,
+      mouthY: 42, mouthWidth: 16, mouthCurve: -2, mouthThickness: 3, mouthOpenMax: 8,
     },
   };
 
