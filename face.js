@@ -1,6 +1,6 @@
 // face.js — R1 Face Character
 // Designed for 240x282 display (Rabbit R1 Creations).
-// v0.033
+// v0.034
 
 // ── Easing functions ─────────────────────────────────────────────────
 window.FACE_EASINGS = {
@@ -30,51 +30,62 @@ window.FACE_EASINGS = {
   const CX = W / 2, CY = H / 2 - 3;
 
   // ── Default emotion presets ──────────────────────────────────────────
-  // eyeRyScale  : multiplier on eye height (>1 = wide, <1 = squint)
-  // eyeYShift   : px — shift eyes up (neg) or down (pos)
-  // lidRest     : 0–1 — how far lid rests closed at idle (0 = open, 0.25 = sleepy)
-  // browYOffset : px above eye center (negative = higher)
-  // browCurve   : px — arc peak height (pos = arch up, neg = arch down)
-  // browAngle   : degrees — inner end up (pos) or down (neg); mirrored per side
-  // browXSpan   : px — half-width of brow arc
-  // browThickness: px — stroke width
-  // blinkRateMult: multiplier on blink wait time (>1 = slower, <1 = faster)
+  // eyeRyScale   : multiplier on eye height (>1 = wide, <1 = squint)
+  // eyeYShift    : px — shift eyes up (neg) or down (pos)
+  // lidRest      : 0–1 — how far lid rests closed at idle
+  // browYOffsetL/R: px above eye center in eye-local space (neg = higher)
+  // browCurveL/R : px — arc peak (pos = arch up)
+  // browAngle    : degrees — inner end tilt; mirrored per side
+  // browXSpan    : px — brow half-width
+  // browThickness: px — stroke width (0 = hidden)
+  // blinkRateMult: multiplier on blink wait time (>1 = slower)
+  // mouthY       : px below face center
+  // mouthWidth   : px — mouth half-width
+  // mouthCurve   : px — arc peak (pos = smile up, neg = frown down)
+  // mouthThickness: px — stroke width (0 = hidden)
+  // mouthOpenMax : px — max jaw-drop height when mouthOpen = 1
   const EMOTION_DEFAULTS = {
     neutral: {
       eyeRyScale: 1.0, eyeYShift: 0,  lidRest: 0,
       browYOffsetL: -16, browYOffsetR: -16, browCurveL: 3, browCurveR: 3,
       browAngle: 0,   browXSpan: 20, browSpacing: 0, browThickness: 2.5,
       blinkRateMult: 1.0,
+      mouthY: 40, mouthWidth: 18, mouthCurve: 2, mouthThickness: 0, mouthOpenMax: 12,
     },
     attentive: {
       eyeRyScale: 1.15, eyeYShift: -2, lidRest: 0,
       browYOffsetL: -19, browYOffsetR: -19, browCurveL: 2, browCurveR: 2,
       browAngle: -2,  browXSpan: 20, browSpacing: 0, browThickness: 2.5,
       blinkRateMult: 0.35,
+      mouthY: 40, mouthWidth: 18, mouthCurve: 1, mouthThickness: 0, mouthOpenMax: 12,
     },
     happy: {
       eyeRyScale: 0.7,  eyeYShift: -1, lidRest: 0.22,
       browYOffsetL: -20, browYOffsetR: -20, browCurveL: 6, browCurveR: 6,
       browAngle: 0,   browXSpan: 21, browSpacing: 0, browThickness: 2.5,
       blinkRateMult: 0.8,
+      mouthY: 40, mouthWidth: 22, mouthCurve: 7, mouthThickness: 2.5, mouthOpenMax: 14,
     },
     surprised: {
       eyeRyScale: 1.35, eyeYShift: -4, lidRest: 0,
       browYOffsetL: -24, browYOffsetR: -24, browCurveL: 5, browCurveR: 5,
       browAngle: 0,   browXSpan: 22, browSpacing: 2, browThickness: 2.5,
       blinkRateMult: 0.2,
+      mouthY: 44, mouthWidth: 14, mouthCurve: -1, mouthThickness: 2, mouthOpenMax: 20,
     },
     thinking: {
       eyeRyScale: 0.88, eyeYShift: 0,  lidRest: 0.08,
       browYOffsetL: -15, browYOffsetR: -15, browCurveL: 1, browCurveR: 1,
       browAngle: 4,   browXSpan: 19, browSpacing: 0, browThickness: 2.5,
       blinkRateMult: 1.6,
+      mouthY: 40, mouthWidth: 14, mouthCurve: 0, mouthThickness: 0, mouthOpenMax: 8,
     },
     tired: {
       eyeRyScale: 0.75, eyeYShift: 3,  lidRest: 0.28,
       browYOffsetL: -12, browYOffsetR: -12, browCurveL: 2, browCurveR: 2,
       browAngle: 3,   browXSpan: 20, browSpacing: 0, browThickness: 2.0,
       blinkRateMult: 1.9,
+      mouthY: 42, mouthWidth: 16, mouthCurve: -2, mouthThickness: 0, mouthOpenMax: 8,
     },
   };
 
@@ -118,9 +129,11 @@ window.FACE_EASINGS = {
     tiltMaxY:   18,
     tiltSmooth: 0.25,
 
-    bgColor:   '#0d0d14',
-    eyeColor:  '#ffffff',
-    browColor: '#ffffff',
+    bgColor:          '#0d0d14',
+    eyeColor:         '#ffffff',
+    browColor:        '#ffffff',
+    mouthColor:       '#ffffff',
+    mouthInteriorColor: '#050508',
 
     // Emotion transition
     transitionDuration: 300,
@@ -162,7 +175,7 @@ window.FACE_EASINGS = {
     t:    1,                             // 0→1; 1 = fully arrived
   };
 
-  // ── Blink / look state ───────────────────────────────────────────────
+  // ── Blink / look / mouth state ───────────────────────────────────────
   const state = {
     blinkRaw: 0, blink: 0,
     blinkPhase: 'idle',
@@ -176,7 +189,33 @@ window.FACE_EASINGS = {
     lookHold:  0,
 
     tiltX: 0, tiltY: 0,
+
+    mouthOpen: 0,   // 0–1, driven by mouth animation below
   };
+
+  // ── Mouth animation ──────────────────────────────────────────────────
+  // queue: [{target, hold}] — each entry animates to target and holds for `hold` ms
+  const mouth = { open: 0, target: 0, holdTimer: 0, queue: [] };
+
+  function speakText(text) {
+    mouth.queue = [];
+    mouth.holdTimer = 0;
+    const words = text.trim().split(/\s+/);
+    const msPerWord = 430;   // ~140 wpm
+    words.forEach(word => {
+      const vowels   = (word.match(/[aeiouAEIOU]/g) || []).length;
+      const openAmt  = Math.min(1, 0.25 + vowels * 0.12);
+      mouth.queue.push({ target: openAmt, hold: msPerWord * 0.55 });
+      mouth.queue.push({ target: 0.05,    hold: msPerWord * 0.45 });
+    });
+    mouth.queue.push({ target: 0, hold: 300 });
+  }
+
+  function stopSpeaking() {
+    mouth.queue   = [];
+    mouth.target  = 0;
+    mouth.holdTimer = 0;
+  }
 
   // ── Helpers ──────────────────────────────────────────────────────────
   function rand(lo, hi)    { return lo + Math.random() * (hi - lo); }
@@ -257,6 +296,17 @@ window.FACE_EASINGS = {
         }
         break;
     }
+
+    // Mouth animation queue
+    if (mouth.queue.length > 0 && mouth.holdTimer <= 0) {
+      const next    = mouth.queue.shift();
+      mouth.target  = next.target;
+      mouth.holdTimer = next.hold;
+    } else {
+      mouth.holdTimer = Math.max(0, mouth.holdTimer - dt);
+    }
+    mouth.open    += (mouth.target - mouth.open) * Math.min(1, dt * 0.018);
+    state.mouthOpen = mouth.open;
 
     // Look
     switch (state.lookPhase) {
@@ -350,7 +400,45 @@ window.FACE_EASINGS = {
     ctx.restore();
   }
 
-  const VERSION = 'v0.033';
+  function drawMouth() {
+    const thickness = emo.live.mouthThickness;
+    const openH     = state.mouthOpen * emo.live.mouthOpenMax;
+    if (thickness <= 0 && openH < 0.5) return;
+
+    const mx    = CX + state.lookX + state.tiltX;
+    const my    = CY + cfg.eyeOffsetY + emo.live.mouthY + state.tiltY;
+    const span  = emo.live.mouthWidth;
+    const curve = emo.live.mouthCurve;
+
+    ctx.save();
+    ctx.translate(mx, my);
+
+    // Filled interior when mouth is open
+    if (openH >= 0.5) {
+      ctx.beginPath();
+      ctx.moveTo(-span, 0);
+      ctx.quadraticCurveTo(0, -curve, span, 0);           // upper lip arc
+      ctx.quadraticCurveTo(0, openH - curve, -span, 0);   // lower lip arc
+      ctx.closePath();
+      ctx.fillStyle = cfg.mouthInteriorColor;
+      ctx.fill();
+    }
+
+    // Lip line
+    if (thickness > 0) {
+      ctx.beginPath();
+      ctx.moveTo(-span, 0);
+      ctx.quadraticCurveTo(0, -curve, span, 0);
+      ctx.strokeStyle = cfg.mouthColor;
+      ctx.lineWidth   = thickness;
+      ctx.lineCap     = 'round';
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  const VERSION = 'v0.034';
   function drawHUD() {
     ctx.save();
     ctx.font = '11px monospace';
@@ -386,7 +474,9 @@ window.FACE_EASINGS = {
       emo.name = name;
       emo.t    = 0;
     },
-    getEmotion() { return emo.name; },
+    getEmotion()      { return emo.name; },
+    speakText(text)   { speakText(text); },
+    stopSpeaking()    { stopSpeaking(); },
   };
 
   // ── PTT button — tap to cycle emotions ──────────────────────────────
@@ -405,6 +495,7 @@ window.FACE_EASINGS = {
     drawBackground();
     drawEye(-1);  drawEye(1);
     drawBrow(-1); drawBrow(1);
+    drawMouth();
     drawHUD();
     requestAnimationFrame(loop);
   }

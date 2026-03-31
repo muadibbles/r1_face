@@ -356,6 +356,10 @@
         <button class="btn" onclick="lookCenter()">·</button>
         <button class="btn" onclick="lookRight()">▶</button>
       </div>
+      <div class="action-row">
+        <button class="btn" onclick="triggerSpeak()">Speak test</button>
+        <button class="btn" onclick="triggerStopSpeak()">Stop</button>
+      </div>
       <label class="toggle-row">
         <input type="checkbox" id="grid-toggle" onchange="setGrid(this.checked)">
         <span>Show grid</span>
@@ -432,6 +436,19 @@
       </div>
     </div>
 
+    <!-- Mouth -->
+    <div class="accordion open" id="acc-mouth">
+      <button class="acc-header" onclick="toggleAcc('acc-mouth')">
+        Mouth <span class="chevron">▾</span>
+      </button>
+      <div class="acc-body">
+        <div class="acc-inner">
+          <div class="emo-btns" id="mouth-emo-btns"></div>
+          <div id="panel-mouth"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Tilt -->
     <div class="accordion" id="acc-tilt">
       <button class="acc-header" onclick="toggleAcc('acc-tilt')">
@@ -488,7 +505,7 @@
     }
   } catch (e) { /* no baked config — face.js will use defaults */ }
 </script>
-<script src="face.js?v=0.033"></script>
+<script src="face.js?v=0.034"></script>
 <script>
 
 // ── Accordion ─────────────────────────────────────────────────────────
@@ -528,9 +545,11 @@ const SELECT_SCHEMA = [
 ];
 
 const COLOR_SCHEMA = [
-  { key: 'bgColor',   label: 'Background', panel: 'colors' },
-  { key: 'eyeColor',  label: 'Eye',        panel: 'colors' },
-  { key: 'browColor', label: 'Brow',       panel: 'colors' },
+  { key: 'bgColor',            label: 'Background',    panel: 'colors' },
+  { key: 'eyeColor',           label: 'Eye',           panel: 'colors' },
+  { key: 'browColor',          label: 'Brow',          panel: 'colors' },
+  { key: 'mouthColor',         label: 'Mouth',         panel: 'colors' },
+  { key: 'mouthInteriorColor', label: 'Mouth interior', panel: 'colors' },
 ];
 
 // ── Input registry — for refreshing all inputs on config load ─────────
@@ -632,6 +651,14 @@ const EMOTION_PARAM_SCHEMA = [
   { key: 'blinkRateMult', label: 'Blink rate',  min: 0.1, max: 3,   step: 0.1,  fmt: v => v.toFixed(1)+'×'      },
 ];
 
+const MOUTH_PARAM_SCHEMA = [
+  { key: 'mouthY',         label: 'Y Position', min: -20, max: 80,  step: 1,    fmt: v => v+'px'  },
+  { key: 'mouthWidth',     label: 'Width',      min: 4,   max: 60,  step: 1,    fmt: v => v+'px'  },
+  { key: 'mouthCurve',     label: 'Curve',      min: -15, max: 15,  step: 0.5,  fmt: v => v+'px'  },
+  { key: 'mouthThickness', label: 'Thickness',  min: 0,   max: 8,   step: 0.25, fmt: v => v+'px'  },
+  { key: 'mouthOpenMax',   label: 'Open max',   min: 0,   max: 40,  step: 1,    fmt: v => v+'px'  },
+];
+
 const BROW_PARAM_SCHEMA = [
   { key: 'browYOffsetL',  label: 'Y Offset L', min: -80, max: 40,  step: 1,    fmt: v => v+'px' },
   { key: 'browYOffsetR',  label: 'Y Offset R', min: -80, max: 40,  step: 1,    fmt: v => v+'px' },
@@ -644,8 +671,9 @@ const BROW_PARAM_SCHEMA = [
 ];
 
 let selectedEmotion = 'neutral';
-const emoSliderRefs  = {};  // key → {input, display, fmt} for emotion params
-const browSliderRefs = {};  // key → {input, display, fmt} for brow params
+const emoSliderRefs   = {};  // key → {input, display, fmt} for emotion params
+const browSliderRefs  = {};  // key → {input, display, fmt} for brow params
+const mouthSliderRefs = {};  // key → {input, display, fmt} for mouth params
 
 function makeEmoBtns(containerId, prefix) {
   const wrap = document.getElementById(containerId);
@@ -707,7 +735,7 @@ function buildBrowPanel() {
 function switchEmotion(name) {
   // Update all emotion button sets
   document.querySelectorAll('.emo-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('#emo-btn-' + name + ', #brow-btn-' + name).forEach(b => b.classList.add('active'));
+  document.querySelectorAll(`#emo-btn-${name}, #brow-btn-${name}, #mouth-btn-${name}`).forEach(b => b.classList.add('active'));
 
   selectedEmotion = name;
   const preset = window.faceConfig.emotions[name];
@@ -724,7 +752,31 @@ function switchEmotion(name) {
     if (ref) { ref.input.value = preset[key]; ref.display.textContent = ref.fmt(preset[key]); }
   });
 
+  // Sync mouth sliders
+  MOUTH_PARAM_SCHEMA.forEach(({ key }) => {
+    const ref = mouthSliderRefs[key];
+    if (ref) { ref.input.value = preset[key]; ref.display.textContent = ref.fmt(preset[key]); }
+  });
+
   window.__faceDebug?.setEmotion(name);
+}
+
+function buildMouthPanel() {
+  makeEmoBtns('mouth-emo-btns', 'mouth-btn-');
+  const wrap = document.getElementById('panel-mouth');
+
+  MOUTH_PARAM_SCHEMA.forEach(s => {
+    const { row, input, display, fmt } = makeSliderRow(
+      s.key, s.label, s.min, s.max, s.step, s.fmt,
+      () => window.faceConfig.emotions[selectedEmotion][s.key],
+      n  => {
+        window.faceConfig.emotions[selectedEmotion][s.key] = n;
+        if (window.__faceDebug?.getEmotion() === selectedEmotion) window.__faceDebug.setEmotion(selectedEmotion);
+      }
+    );
+    mouthSliderRefs[s.key] = { input, display, fmt };
+    wrap.appendChild(row);
+  });
 }
 
 // ── Blink profiles panel ──────────────────────────────────────────────
@@ -760,13 +812,16 @@ function buildBlinkProfiles() {
 
 buildEmotionPanel();
 buildBrowPanel();
+buildMouthPanel();
 buildBlinkProfiles();
 
 // ── Debug buttons ─────────────────────────────────────────────────────
-function triggerBlink() { window.__faceDebug?.blink(); }
-function lookLeft()     { window.__faceDebug?.look(-window.faceConfig.lookMax); }
-function lookRight()    { window.__faceDebug?.look( window.faceConfig.lookMax); }
-function lookCenter()   { window.__faceDebug?.look(0); }
+function triggerBlink()     { window.__faceDebug?.blink(); }
+function lookLeft()         { window.__faceDebug?.look(-window.faceConfig.lookMax); }
+function lookRight()        { window.__faceDebug?.look( window.faceConfig.lookMax); }
+function lookCenter()       { window.__faceDebug?.look(0); }
+function triggerSpeak()     { window.__faceDebug?.speakText('Hey there, how are you doing today? I am doing pretty well, thanks for asking.'); }
+function triggerStopSpeak() { window.__faceDebug?.stopSpeaking(); }
 
 // ── Grid overlay ──────────────────────────────────────────────────────
 const gridCanvas = document.getElementById('grid-overlay');
