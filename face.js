@@ -440,7 +440,11 @@ window.FACE_EASINGS = {
     ctx.restore();
   }
 
-  const VERSION = 'v0.034';
+  // ── Voice state ──────────────────────────────────────────────────────
+  // 'idle' | 'listening' | 'processing'
+  let voiceState = 'idle';
+
+  const VERSION = 'v0.035';
   function drawHUD() {
     ctx.save();
     ctx.font = '11px monospace';
@@ -450,7 +454,8 @@ window.FACE_EASINGS = {
     ctx.fillText(VERSION, 4, H - 4);
 
     ctx.textAlign = 'right';
-    ctx.fillText(emo.name, W - 4, H - 4);
+    const voiceTag = voiceState !== 'idle' ? ' · ' + voiceState : '';
+    ctx.fillText(emo.name + voiceTag, W - 4, H - 4);
 
     ctx.restore();
   }
@@ -481,12 +486,83 @@ window.FACE_EASINGS = {
     stopSpeaking()    { stopSpeaking(); },
   };
 
-  // ── PTT button — tap to cycle emotions ──────────────────────────────
-  window.addEventListener('sideClick', () => {
-    const names  = window.FACE_EMOTION_NAMES;
-    const next   = (names.indexOf(emo.name) + 1) % names.length;
+  // ── Scroll wheel — cycle emotions ────────────────────────────────────
+  window.addEventListener('scrollUp', () => {
+    const names = window.FACE_EMOTION_NAMES;
+    const next  = (names.indexOf(emo.name) + 1) % names.length;
     window.__faceDebug.setEmotion(names[next]);
   });
+  window.addEventListener('scrollDown', () => {
+    const names = window.FACE_EMOTION_NAMES;
+    const prev  = (names.indexOf(emo.name) - 1 + names.length) % names.length;
+    window.__faceDebug.setEmotion(names[prev]);
+  });
+
+  // ── Voice pipeline (R1 only) ─────────────────────────────────────────
+  const ON_R1 = typeof PluginMessageHandler !== 'undefined';
+
+  if (ON_R1) {
+    let mediaStream  = null;
+    let recorder     = null;
+    let audioChunks  = [];
+    const MAX_RECORD_MS = 30000;  // safety cut-off
+    let recordTimer  = null;
+
+    async function startListening() {
+      if (voiceState !== 'idle') return;
+      try {
+        mediaStream  = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunks  = [];
+        recorder     = new MediaRecorder(mediaStream, { mimeType: 'audio/webm;codecs=opus' });
+        recorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+        recorder.onstop = onRecordingStop;
+        recorder.start();
+        voiceState = 'listening';
+        window.__faceDebug.setEmotion('attentive');
+        recordTimer = setTimeout(stopListening, MAX_RECORD_MS);
+      } catch (e) {
+        console.error('Mic error:', e);
+      }
+    }
+
+    function stopListening() {
+      if (voiceState !== 'listening') return;
+      clearTimeout(recordTimer);
+      if (recorder && recorder.state !== 'inactive') recorder.stop();
+      if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+      voiceState = 'processing';
+      window.__faceDebug.setEmotion('thinking');
+    }
+
+    async function onRecordingStop() {
+      const blob = new Blob(audioChunks, { type: 'audio/webm' });
+      const transcript = await transcribeAudio(blob);
+      window.__lepusState = window.__lepusState || {};
+      window.__lepusState.lastTranscript = transcript;
+      // Phase 3: LLM call goes here
+      if (!transcript) { voiceState = 'idle'; window.__faceDebug.setEmotion('neutral'); }
+    }
+
+    async function transcribeAudio(blob) {
+      try {
+        const fd = new FormData();
+        fd.append('audio_file', blob, 'audio.webm');
+        const res = await fetch(
+          'https://masatrad-whisper.hf.space/asr?output=txt&language=en',
+          { method: 'POST', body: fd }
+        );
+        return (await res.text()).trim();
+      } catch (e) {
+        console.error('STT error:', e);
+        voiceState = 'idle';
+        window.__faceDebug.setEmotion('neutral');
+        return '';
+      }
+    }
+
+    window.addEventListener('longPressStart', startListening);
+    window.addEventListener('longPressEnd',   stopListening);
+  }
 
   // ── Main loop ────────────────────────────────────────────────────────
   let lastTime = performance.now();
