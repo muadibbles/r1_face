@@ -455,7 +455,7 @@ window.FACE_EASINGS = {
   // 'idle' | 'listening' | 'processing'
   let voiceState = 'idle';
 
-  const VERSION = 'v0.036';
+  const VERSION = 'v0.037';
   function drawHUD() {
     ctx.save();
     ctx.font = '11px monospace';
@@ -467,6 +467,19 @@ window.FACE_EASINGS = {
     ctx.textAlign = 'right';
     const voiceTag = voiceState !== 'idle' ? ' · ' + voiceState : '';
     ctx.fillText(emo.name + voiceTag, W - 4, H - 4);
+
+    // Listening indicator — red dot bottom-center
+    if (voiceState === 'listening') {
+      ctx.beginPath();
+      ctx.arc(W / 2, H - 7, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff3333';
+      ctx.fill();
+    } else if (voiceState === 'processing') {
+      ctx.beginPath();
+      ctx.arc(W / 2, H - 7, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffaa22';
+      ctx.fill();
+    }
 
     ctx.restore();
   }
@@ -524,6 +537,9 @@ window.FACE_EASINGS = {
 
     async function startListening() {
       if (voiceState !== 'idle') return;
+      // Visual feedback immediately — before mic access
+      voiceState = 'listening';
+      window.__faceDebug.setEmotion('attentive');
       try {
         mediaStream  = await navigator.mediaDevices.getUserMedia({ audio: true });
         audioChunks  = [];
@@ -531,11 +547,11 @@ window.FACE_EASINGS = {
         recorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
         recorder.onstop = onRecordingStop;
         recorder.start();
-        voiceState = 'listening';
-        window.__faceDebug.setEmotion('attentive');
         recordTimer = setTimeout(stopListening, MAX_RECORD_MS);
       } catch (e) {
         console.error('Mic error:', e);
+        voiceState = 'idle';
+        window.__faceDebug.setEmotion('neutral');
       }
     }
 
