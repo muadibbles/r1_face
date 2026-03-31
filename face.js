@@ -535,6 +535,9 @@ window.FACE_EASINGS = {
     const MAX_RECORD_MS = 30000;  // safety cut-off
     let recordTimer  = null;
 
+    // Wake the Whisper Space on load so it's ready when the user first speaks
+    fetch('https://masatrad-whisper.hf.space/', { method: 'GET', mode: 'no-cors' }).catch(() => {});
+
     async function startListening() {
       if (voiceState !== 'idle') return;
       // Visual feedback immediately — before mic access
