@@ -308,6 +308,11 @@ window.FACE_EASINGS = {
     mouth.open    += (mouth.target - mouth.open) * Math.min(1, dt * 0.018);
     state.mouthOpen = mouth.open;
 
+    // Speaking done → return to idle
+    if (voiceState === 'speaking' && mouth.queue.length === 0 && mouth.target === 0 && mouth.open < 0.02) {
+      voiceState = 'idle';
+    }
+
     // Look
     switch (state.lookPhase) {
       case 'idle':
@@ -444,7 +449,7 @@ window.FACE_EASINGS = {
   // 'idle' | 'listening' | 'processing'
   let voiceState = 'idle';
 
-  const VERSION = 'v0.035';
+  const VERSION = 'v0.036';
   function drawHUD() {
     ctx.save();
     ctx.font = '11px monospace';
@@ -498,6 +503,9 @@ window.FACE_EASINGS = {
     window.__faceDebug.setEmotion(names[prev]);
   });
 
+  // ── Lepus personality ────────────────────────────────────────────────
+  const LEPUS_PROMPT = `You are Lepus, an AI assistant who lives as an animated face on a Rabbit R1 device. You are aware that you are an AI, that you have a face with eyes and a mouth, and that you exist on a small orange handheld device. You have a dry, deadpan personality — you say what you mean, you don't perform enthusiasm you don't feel, and you find the world mildly but genuinely interesting. You're conversational and engaged, not terse. Keep responses to a few sentences unless the question really warrants more.`;
+
   // ── Voice pipeline (R1 only) ─────────────────────────────────────────
   const ON_R1 = typeof PluginMessageHandler !== 'undefined';
 
@@ -539,9 +547,47 @@ window.FACE_EASINGS = {
       const transcript = await transcribeAudio(blob);
       window.__lepusState = window.__lepusState || {};
       window.__lepusState.lastTranscript = transcript;
-      // Phase 3: LLM call goes here
-      if (!transcript) { voiceState = 'idle'; window.__faceDebug.setEmotion('neutral'); }
+      if (!transcript) {
+        voiceState = 'idle';
+        window.__faceDebug.setEmotion('neutral');
+        return;
+      }
+      sendToLLM(transcript);
     }
+
+    function sendToLLM(transcript) {
+      const emotionCtx  = `Your face is currently expressing: ${emo.name}`;
+      const fullMessage = `${LEPUS_PROMPT}\n${emotionCtx}\n\nUser: ${transcript}`;
+
+      // Timeout guard — reset if no response within 15s
+      window.__lepusState.llmTimeout = setTimeout(() => {
+        if (voiceState === 'processing') {
+          voiceState = 'idle';
+          window.__faceDebug.setEmotion('neutral');
+        }
+      }, 15000);
+
+      PluginMessageHandler.postMessage(JSON.stringify({
+        message:          fullMessage,
+        useLLM:           true,
+        wantsR1Response:  true,
+      }));
+    }
+
+    window.onPluginMessage = function(data) {
+      if (voiceState !== 'processing') return;
+      clearTimeout(window.__lepusState?.llmTimeout);
+      const reply = (data.message || data.data || '').trim();
+      if (!reply) {
+        voiceState = 'idle';
+        window.__faceDebug.setEmotion('neutral');
+        return;
+      }
+      window.__lepusState.lastReply = reply;
+      voiceState = 'speaking';
+      window.__faceDebug.setEmotion('neutral');
+      speakText(reply);
+    };
 
     async function transcribeAudio(blob) {
       try {
