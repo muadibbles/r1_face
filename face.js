@@ -613,12 +613,15 @@ window.FACE_EASINGS = {
 
     async function transcribeAudio(blob) {
       try {
+        const controller = new AbortController();
+        const timeout    = setTimeout(() => controller.abort(), 12000);
         const fd = new FormData();
         fd.append('audio_file', blob, 'audio.webm');
         const res = await fetch(
           'https://masatrad-whisper.hf.space/asr?output=txt&language=en',
-          { method: 'POST', body: fd }
+          { method: 'POST', body: fd, signal: controller.signal }
         );
+        clearTimeout(timeout);
         return (await res.text()).trim();
       } catch (e) {
         console.error('STT error:', e);
