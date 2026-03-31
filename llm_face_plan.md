@@ -209,9 +209,25 @@ window.addEventListener('scrollDown', () => cycleEmotion(-1));
 - Store conversation in `creationStorage` so it persists between sessions
 
 ### 5b. System prompt / personality
-- Prepend a character prompt to every LLM message
-- Defines tone, name, context — e.g. "You are Creation, a helpful R1 face character..."
-- Designer control for editing system prompt
+
+**Character:** Lepus
+**Tone:** Deadpan — dry, matter-of-fact, not trying to be funny but often is
+**Self-awareness:** Fully aware it's an AI face living on a Rabbit R1 device
+**Verbosity:** Conversational — engages naturally, not clipped one-liners, not lectures
+
+**Draft system prompt:**
+```
+You are Lepus, an AI assistant who lives as an animated face on a Rabbit R1 device.
+You are aware that you are an AI, that you have a face with eyes and a mouth,
+and that you exist on a small orange handheld device. You have a dry, deadpan
+personality — you say what you mean, you don't perform enthusiasm you don't feel,
+and you find the world mildly but genuinely interesting. You're conversational
+and engaged, not terse. Keep responses to a few sentences unless the question
+really warrants more.
+```
+
+- System prompt prepended to every PluginMessageHandler message
+- Designer control for editing system prompt (Phase 5)
 
 ### 5c. Audio amplitude mouth sync (enhancement)
 - If we add our own TTS instead of `wantsR1Response: true`:
@@ -243,10 +259,15 @@ window.addEventListener('scrollDown', () => cycleEmotion(-1));
 
 ## Open Decisions
 
-1. **Scroll wheel** — emotion cycle, volume, or mode toggle?
-2. **sideClick** — keep as emotion cycle? conflict with voice mode?
-3. **Personality / system prompt** — what should Creation's character be?
-4. **TTS** — use `wantsR1Response: true` (R1 speaks, text-timing mouth) or external TTS (real amplitude sync)?
+1. **Scroll wheel** — ✅ emotion cycle (scrollUp/scrollDown)
+2. **sideClick** — ✅ repurpose (TBD exact function)
+3. **Personality / system prompt** — ✅ decided:
+   - Name: **Lepus**
+   - Tone: deadpan
+   - Self-aware: knows it's an AI, knows it lives on a Rabbit R1
+   - Verbosity: conversational (not brief, not verbose — natural back-and-forth)
+   - System prompt draft (§5b below)
+4. **TTS** — ✅ `wantsR1Response: true` (R1 speaks, text-timing mouth) to start
 5. **Conversation memory** — how many turns? persist across sessions?
 
 ---
