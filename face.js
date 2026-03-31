@@ -50,42 +50,42 @@ window.FACE_EASINGS = {
       browYOffsetL: -16, browYOffsetR: -16, browCurveL: 3, browCurveR: 3,
       browAngle: 0,   browXSpan: 20, browSpacing: 0, browThickness: 2.5,
       blinkRateMult: 1.0,
-      mouthY: 40, mouthWidth: 18, mouthCurve: 2, mouthThickness: 3, mouthOpenMax: 12,
+      mouthY: 40, mouthWidth: 18, mouthCurve: 2, mouthAngle: 0, mouthThickness: 3, mouthOpenMax: 12,
     },
     attentive: {
       eyeRyScale: 1.15, eyeYShift: -2, lidRest: 0,
       browYOffsetL: -19, browYOffsetR: -19, browCurveL: 2, browCurveR: 2,
       browAngle: -2,  browXSpan: 20, browSpacing: 0, browThickness: 2.5,
       blinkRateMult: 0.35,
-      mouthY: 40, mouthWidth: 18, mouthCurve: 1, mouthThickness: 3, mouthOpenMax: 12,
+      mouthY: 40, mouthWidth: 18, mouthCurve: 1, mouthAngle: 0, mouthThickness: 3, mouthOpenMax: 12,
     },
     happy: {
       eyeRyScale: 0.7,  eyeYShift: -1, lidRest: 0.22,
       browYOffsetL: -20, browYOffsetR: -20, browCurveL: 6, browCurveR: 6,
       browAngle: 0,   browXSpan: 21, browSpacing: 0, browThickness: 2.5,
       blinkRateMult: 0.8,
-      mouthY: 40, mouthWidth: 22, mouthCurve: 7, mouthThickness: 2.5, mouthOpenMax: 14,
+      mouthY: 40, mouthWidth: 22, mouthCurve: 7, mouthAngle: 0, mouthThickness: 2.5, mouthOpenMax: 14,
     },
     surprised: {
       eyeRyScale: 1.35, eyeYShift: -4, lidRest: 0,
       browYOffsetL: -24, browYOffsetR: -24, browCurveL: 5, browCurveR: 5,
       browAngle: 0,   browXSpan: 22, browSpacing: 2, browThickness: 2.5,
       blinkRateMult: 0.2,
-      mouthY: 44, mouthWidth: 14, mouthCurve: -1, mouthThickness: 2, mouthOpenMax: 20,
+      mouthY: 44, mouthWidth: 14, mouthCurve: -1, mouthAngle: 0, mouthThickness: 2, mouthOpenMax: 20,
     },
     thinking: {
       eyeRyScale: 0.88, eyeYShift: 0,  lidRest: 0.08,
       browYOffsetL: -15, browYOffsetR: -15, browCurveL: 1, browCurveR: 1,
       browAngle: 4,   browXSpan: 19, browSpacing: 0, browThickness: 2.5,
       blinkRateMult: 1.6,
-      mouthY: 40, mouthWidth: 14, mouthCurve: 0, mouthThickness: 3, mouthOpenMax: 8,
+      mouthY: 40, mouthWidth: 14, mouthCurve: 0, mouthAngle: 0, mouthThickness: 3, mouthOpenMax: 8,
     },
     tired: {
       eyeRyScale: 0.75, eyeYShift: 3,  lidRest: 0.28,
       browYOffsetL: -12, browYOffsetR: -12, browCurveL: 2, browCurveR: 2,
       browAngle: 3,   browXSpan: 20, browSpacing: 0, browThickness: 2.0,
       blinkRateMult: 1.9,
-      mouthY: 42, mouthWidth: 16, mouthCurve: -2, mouthThickness: 3, mouthOpenMax: 8,
+      mouthY: 42, mouthWidth: 16, mouthCurve: -2, mouthAngle: 0, mouthThickness: 3, mouthOpenMax: 8,
     },
   };
 
@@ -409,9 +409,11 @@ window.FACE_EASINGS = {
     const my    = CY + cfg.eyeOffsetY + emo.live.mouthY + state.tiltY;
     const span  = emo.live.mouthWidth;
     const curve = emo.live.mouthCurve;
+    const angle = emo.live.mouthAngle * Math.PI / 180;
 
     ctx.save();
     ctx.translate(mx, my);
+    ctx.rotate(angle);
 
     // Filled interior when mouth is open
     if (openH >= 0.5) {
