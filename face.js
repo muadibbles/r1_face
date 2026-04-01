@@ -455,7 +455,7 @@ window.FACE_EASINGS = {
   // 'idle' | 'listening' | 'processing'
   let voiceState = 'idle';
 
-  const VERSION = 'v0.037';
+  const VERSION = 'v0.038';
   function drawHUD() {
     ctx.save();
     ctx.font = '11px monospace';
@@ -599,10 +599,18 @@ window.FACE_EASINGS = {
       }));
     }
 
-    window.onPluginMessage = function(data) {
+    window.onPluginMessage = function(evt) {
       if (voiceState !== 'processing') return;
       clearTimeout(window.__lepusState?.llmTimeout);
-      const reply = (data.message || data.data || '').trim();
+      // The R1 passes a MessageEvent-like object; response text is in evt.data (JSON string)
+      let reply = '';
+      try {
+        const parsed = JSON.parse(evt.data);
+        reply = (parsed.response || parsed.message || '').trim();
+      } catch (e) {
+        // Fallback in case the runtime passes a plain object or string directly
+        reply = (evt.message || (typeof evt.data === 'string' ? evt.data : '') || '').trim();
+      }
       if (!reply) {
         voiceState = 'idle';
         window.__faceDebug.setEmotion('neutral');
@@ -615,18 +623,20 @@ window.FACE_EASINGS = {
     };
 
     async function transcribeAudio(blob) {
+      const controller = new AbortController();
+      const timeout    = setTimeout(() => controller.abort(), 20000);
       try {
-        const controller = new AbortController();
-        const timeout    = setTimeout(() => controller.abort(), 12000);
         const fd = new FormData();
         fd.append('audio_file', blob, 'audio.webm');
-        const res = await fetch(
+        const res  = await fetch(
           'https://masatrad-whisper.hf.space/asr?output=txt&language=en',
           { method: 'POST', body: fd, signal: controller.signal }
         );
+        const text = await res.text();   // keep timeout active through body read
         clearTimeout(timeout);
-        return (await res.text()).trim();
+        return text.trim();
       } catch (e) {
+        clearTimeout(timeout);
         console.error('STT error:', e);
         voiceState = 'idle';
         window.__faceDebug.setEmotion('neutral');
