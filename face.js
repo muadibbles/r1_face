@@ -456,7 +456,7 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.038';
+  const VERSION = 'v0.039';
   function drawHUD() {
     ctx.save();
     ctx.font = '11px monospace';
