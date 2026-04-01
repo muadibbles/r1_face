@@ -456,7 +456,7 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.039';
+  const VERSION = 'v0.040';
   function drawHUD() {
     ctx.save();
     ctx.font = '11px monospace';
@@ -624,7 +624,7 @@ window.FACE_EASINGS = {
 
       window.addEventListener('longPressEnd', () => {
         if (voiceState !== 'listening') return;
-        voiceState = 'processing'; voiceStep = 'stt';
+        voiceState = 'processing'; voiceStep = 'webSpeech';
         window.__faceDebug.setEmotion('thinking');
         recognition.stop();
       });
@@ -672,23 +672,19 @@ window.FACE_EASINGS = {
       window.addEventListener('longPressEnd', stopWhisperListening);
 
       async function transcribeAudio(blob) {
-        const controller = new AbortController();
-        const timeout    = setTimeout(() => controller.abort(), 20000);
+        // Promise.race is more reliable than AbortController on some WebViews —
+        // the fetch may be orphaned but the function always returns within 20s.
+        const dead = new Promise(resolve => setTimeout(() => resolve(''), 20000));
         try {
           const fd = new FormData();
           fd.append('audio_file', blob, 'audio.webm');
-          const res  = await fetch(
+          const fetchP = fetch(
             'https://masatrad-whisper.hf.space/asr?output=txt&language=en',
-            { method: 'POST', body: fd, signal: controller.signal }
-          );
-          const text = await res.text();
-          clearTimeout(timeout);
-          return text.trim();
+            { method: 'POST', body: fd }
+          ).then(r => r.text());
+          return ((await Promise.race([fetchP, dead])) || '').trim();
         } catch (e) {
-          clearTimeout(timeout);
           console.error('STT error:', e);
-          voiceState = 'idle'; voiceStep = '';
-          window.__faceDebug.setEmotion('neutral');
           return '';
         }
       }
