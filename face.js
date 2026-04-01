@@ -456,7 +456,7 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.041';
+  const VERSION = 'v0.042';
   function drawHUD() {
     ctx.save();
     ctx.font = '11px monospace';
@@ -576,67 +576,8 @@ window.FACE_EASINGS = {
     };
 
     // ── STT: Web Speech API (primary) or MediaRecorder+Whisper (fallback) ─
-    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-    if (SpeechRec) {
-      // ── Web Speech API path ────────────────────────────────────────────
-      const recognition       = new SpeechRec();
-      recognition.continuous  = false;
-      recognition.interimResults = false;
-      recognition.lang        = 'en-US';
-      recognition.maxAlternatives = 1;
-
-      let finalTranscript = '';
-
-      recognition.onresult = (e) => {
-        finalTranscript = Array.from(e.results)
-          .filter(r => r.isFinal)
-          .map(r => r[0].transcript)
-          .join(' ').trim();
-      };
-
-      let sttResetTimer = null;
-      function clearSttTimer() { clearTimeout(sttResetTimer); sttResetTimer = null; }
-      function resetToIdle() { voiceState = 'idle'; voiceStep = ''; window.__faceDebug.setEmotion('neutral'); }
-
-      recognition.onend = () => {
-        clearSttTimer();
-        if (voiceState !== 'processing') return;
-        window.__lepusState.lastTranscript = finalTranscript;
-        if (finalTranscript) {
-          sendToLLM(finalTranscript);
-        } else {
-          resetToIdle();
-        }
-      };
-
-      recognition.onerror = (e) => {
-        clearSttTimer();
-        console.error('SpeechRec error:', e.error);
-        resetToIdle();
-      };
-
-      window.addEventListener('longPressStart', () => {
-        if (voiceState !== 'idle') return;
-        voiceState = 'listening';
-        finalTranscript = '';
-        window.__faceDebug.setEmotion('attentive');
-        try { recognition.start(); } catch (e) {
-          resetToIdle();
-        }
-      });
-
-      window.addEventListener('longPressEnd', () => {
-        if (voiceState !== 'listening') return;
-        voiceState = 'processing'; voiceStep = 'webSpeech';
-        window.__faceDebug.setEmotion('thinking');
-        // Hard reset if onend/onerror never fire (recognition service unreachable)
-        sttResetTimer = setTimeout(resetToIdle, 8000);
-        recognition.stop();
-      });
-
-    } else {
-      // ── MediaRecorder + Whisper fallback ──────────────────────────────
+    {
+      // ── MediaRecorder + Whisper STT ────────────────────────────────────
       fetch('https://masatrad-whisper.hf.space/', { method: 'GET', mode: 'no-cors' }).catch(() => {});
 
       let mediaStream = null, recorder = null, audioChunks = [], recordTimer = null;
