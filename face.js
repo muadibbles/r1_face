@@ -532,66 +532,16 @@ window.FACE_EASINGS = {
   const ON_R1 = typeof PluginMessageHandler !== 'undefined';
 
   if (ON_R1) {
-    let mediaStream  = null;
-    let recorder     = null;
-    let audioChunks  = [];
-    const MAX_RECORD_MS = 30000;  // safety cut-off
-    let recordTimer  = null;
 
-    // Wake the Whisper Space on load so it's ready when the user first speaks
-    fetch('https://masatrad-whisper.hf.space/', { method: 'GET', mode: 'no-cors' }).catch(() => {});
-
-    async function startListening() {
-      if (voiceState !== 'idle') return;
-      // Visual feedback immediately — before mic access
-      voiceState = 'listening';
-      window.__faceDebug.setEmotion('attentive');
-      try {
-        mediaStream  = await navigator.mediaDevices.getUserMedia({ audio: true });
-        audioChunks  = [];
-        recorder     = new MediaRecorder(mediaStream, { mimeType: 'audio/webm;codecs=opus' });
-        recorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
-        recorder.onstop = onRecordingStop;
-        recorder.start();
-        recordTimer = setTimeout(stopListening, MAX_RECORD_MS);
-      } catch (e) {
-        console.error('Mic error:', e);
-        voiceState = 'idle';
-        window.__faceDebug.setEmotion('neutral');
-      }
-    }
-
-    function stopListening() {
-      if (voiceState !== 'listening') return;
-      clearTimeout(recordTimer);
-      if (recorder && recorder.state !== 'inactive') recorder.stop();
-      if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
-      voiceState = 'processing';
-      voiceStep  = 'stt';
-      window.__faceDebug.setEmotion('thinking');
-    }
-
-    async function onRecordingStop() {
-      const blob = new Blob(audioChunks, { type: 'audio/webm' });
-      const transcript = await transcribeAudio(blob);
-      window.__lepusState = window.__lepusState || {};
-      window.__lepusState.lastTranscript = transcript;
-      if (!transcript) {
-        voiceState = 'idle';
-        voiceStep  = '';
-        window.__faceDebug.setEmotion('neutral');
-        return;
-      }
-      sendToLLM(transcript);
-    }
+    // ── Shared: LLM call + response handler ─────────────────────────────
+    window.__lepusState = window.__lepusState || {};
 
     function sendToLLM(transcript) {
       const emotionCtx  = `Your face is currently expressing: ${emo.name}`;
       const fullMessage = `${LEPUS_PROMPT}\n${emotionCtx}\n\nUser: ${transcript}`;
 
-      voiceStep = 'llm';   // HUD now shows "processing:llm"
+      voiceStep = 'llm';
 
-      // Timeout guard — reset if no response within 20s
       window.__lepusState.llmTimeout = setTimeout(() => {
         if (voiceState === 'processing') {
           voiceState = 'idle';
@@ -601,61 +551,148 @@ window.FACE_EASINGS = {
       }, 20000);
 
       PluginMessageHandler.postMessage(JSON.stringify({
-        message:          fullMessage,
-        useLLM:           true,
-        wantsR1Response:  true,
+        message:         fullMessage,
+        useLLM:          true,
+        wantsR1Response: true,
       }));
     }
 
     window.onPluginMessage = function(evt) {
       if (voiceState !== 'processing') return;
-      clearTimeout(window.__lepusState?.llmTimeout);
-      // The R1 passes a MessageEvent-like object; response text is in evt.data (JSON string)
+      clearTimeout(window.__lepusState.llmTimeout);
       let reply = '';
       try {
         const parsed = JSON.parse(evt.data);
         reply = (parsed.response || parsed.message || '').trim();
       } catch (e) {
-        // Fallback in case the runtime passes a plain object or string directly
         reply = (evt.message || (typeof evt.data === 'string' ? evt.data : '') || '').trim();
       }
       voiceStep = '';
-      if (!reply) {
-        voiceState = 'idle';
-        window.__faceDebug.setEmotion('neutral');
-        return;
-      }
+      if (!reply) { voiceState = 'idle'; window.__faceDebug.setEmotion('neutral'); return; }
       window.__lepusState.lastReply = reply;
       voiceState = 'speaking';
       window.__faceDebug.setEmotion('neutral');
       speakText(reply);
     };
 
-    async function transcribeAudio(blob) {
-      const controller = new AbortController();
-      const timeout    = setTimeout(() => controller.abort(), 20000);
-      try {
-        const fd = new FormData();
-        fd.append('audio_file', blob, 'audio.webm');
-        const res  = await fetch(
-          'https://masatrad-whisper.hf.space/asr?output=txt&language=en',
-          { method: 'POST', body: fd, signal: controller.signal }
-        );
-        const text = await res.text();   // keep timeout active through body read
-        clearTimeout(timeout);
-        return text.trim();
-      } catch (e) {
-        clearTimeout(timeout);
-        console.error('STT error:', e);
-        voiceState = 'idle';
-        voiceStep  = '';
+    // ── STT: Web Speech API (primary) or MediaRecorder+Whisper (fallback) ─
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (SpeechRec) {
+      // ── Web Speech API path ────────────────────────────────────────────
+      const recognition       = new SpeechRec();
+      recognition.continuous  = false;
+      recognition.interimResults = false;
+      recognition.lang        = 'en-US';
+      recognition.maxAlternatives = 1;
+
+      let finalTranscript = '';
+
+      recognition.onresult = (e) => {
+        finalTranscript = Array.from(e.results)
+          .filter(r => r.isFinal)
+          .map(r => r[0].transcript)
+          .join(' ').trim();
+      };
+
+      recognition.onend = () => {
+        if (voiceState !== 'processing') return;
+        window.__lepusState.lastTranscript = finalTranscript;
+        if (finalTranscript) {
+          sendToLLM(finalTranscript);
+        } else {
+          voiceState = 'idle'; voiceStep = '';
+          window.__faceDebug.setEmotion('neutral');
+        }
+      };
+
+      recognition.onerror = (e) => {
+        console.error('SpeechRec error:', e.error);
+        voiceState = 'idle'; voiceStep = '';
         window.__faceDebug.setEmotion('neutral');
-        return '';
+      };
+
+      window.addEventListener('longPressStart', () => {
+        if (voiceState !== 'idle') return;
+        voiceState = 'listening';
+        finalTranscript = '';
+        window.__faceDebug.setEmotion('attentive');
+        try { recognition.start(); } catch (e) {
+          voiceState = 'idle'; window.__faceDebug.setEmotion('neutral');
+        }
+      });
+
+      window.addEventListener('longPressEnd', () => {
+        if (voiceState !== 'listening') return;
+        voiceState = 'processing'; voiceStep = 'stt';
+        window.__faceDebug.setEmotion('thinking');
+        recognition.stop();
+      });
+
+    } else {
+      // ── MediaRecorder + Whisper fallback ──────────────────────────────
+      fetch('https://masatrad-whisper.hf.space/', { method: 'GET', mode: 'no-cors' }).catch(() => {});
+
+      let mediaStream = null, recorder = null, audioChunks = [], recordTimer = null;
+      const MAX_RECORD_MS = 30000;
+
+      window.addEventListener('longPressStart', () => {
+        if (voiceState !== 'idle') return;
+        voiceState = 'listening';
+        window.__faceDebug.setEmotion('attentive');
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+          mediaStream = stream;
+          audioChunks = [];
+          recorder    = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+          recorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+          recorder.onstop = async () => {
+            const blob       = new Blob(audioChunks, { type: 'audio/webm' });
+            const transcript = await transcribeAudio(blob);
+            window.__lepusState.lastTranscript = transcript;
+            if (!transcript) { voiceState = 'idle'; voiceStep = ''; window.__faceDebug.setEmotion('neutral'); return; }
+            sendToLLM(transcript);
+          };
+          recorder.start();
+          recordTimer = setTimeout(() => stopWhisperListening(), MAX_RECORD_MS);
+        }).catch(e => {
+          console.error('Mic error:', e);
+          voiceState = 'idle'; window.__faceDebug.setEmotion('neutral');
+        });
+      });
+
+      function stopWhisperListening() {
+        if (voiceState !== 'listening') return;
+        clearTimeout(recordTimer);
+        if (recorder && recorder.state !== 'inactive') recorder.stop();
+        if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+        voiceState = 'processing'; voiceStep = 'stt';
+        window.__faceDebug.setEmotion('thinking');
+      }
+
+      window.addEventListener('longPressEnd', stopWhisperListening);
+
+      async function transcribeAudio(blob) {
+        const controller = new AbortController();
+        const timeout    = setTimeout(() => controller.abort(), 20000);
+        try {
+          const fd = new FormData();
+          fd.append('audio_file', blob, 'audio.webm');
+          const res  = await fetch(
+            'https://masatrad-whisper.hf.space/asr?output=txt&language=en',
+            { method: 'POST', body: fd, signal: controller.signal }
+          );
+          const text = await res.text();
+          clearTimeout(timeout);
+          return text.trim();
+        } catch (e) {
+          clearTimeout(timeout);
+          console.error('STT error:', e);
+          voiceState = 'idle'; voiceStep = '';
+          window.__faceDebug.setEmotion('neutral');
+          return '';
+        }
       }
     }
-
-    window.addEventListener('longPressStart', startListening);
-    window.addEventListener('longPressEnd',   stopListening);
   }
 
   // ── Main loop ────────────────────────────────────────────────────────
