@@ -456,7 +456,7 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.040';
+  const VERSION = 'v0.041';
   function drawHUD() {
     ctx.save();
     ctx.font = '11px monospace';
@@ -595,21 +595,25 @@ window.FACE_EASINGS = {
           .join(' ').trim();
       };
 
+      let sttResetTimer = null;
+      function clearSttTimer() { clearTimeout(sttResetTimer); sttResetTimer = null; }
+      function resetToIdle() { voiceState = 'idle'; voiceStep = ''; window.__faceDebug.setEmotion('neutral'); }
+
       recognition.onend = () => {
+        clearSttTimer();
         if (voiceState !== 'processing') return;
         window.__lepusState.lastTranscript = finalTranscript;
         if (finalTranscript) {
           sendToLLM(finalTranscript);
         } else {
-          voiceState = 'idle'; voiceStep = '';
-          window.__faceDebug.setEmotion('neutral');
+          resetToIdle();
         }
       };
 
       recognition.onerror = (e) => {
+        clearSttTimer();
         console.error('SpeechRec error:', e.error);
-        voiceState = 'idle'; voiceStep = '';
-        window.__faceDebug.setEmotion('neutral');
+        resetToIdle();
       };
 
       window.addEventListener('longPressStart', () => {
@@ -618,7 +622,7 @@ window.FACE_EASINGS = {
         finalTranscript = '';
         window.__faceDebug.setEmotion('attentive');
         try { recognition.start(); } catch (e) {
-          voiceState = 'idle'; window.__faceDebug.setEmotion('neutral');
+          resetToIdle();
         }
       });
 
@@ -626,6 +630,8 @@ window.FACE_EASINGS = {
         if (voiceState !== 'listening') return;
         voiceState = 'processing'; voiceStep = 'webSpeech';
         window.__faceDebug.setEmotion('thinking');
+        // Hard reset if onend/onerror never fire (recognition service unreachable)
+        sttResetTimer = setTimeout(resetToIdle, 8000);
         recognition.stop();
       });
 
