@@ -1,81 +1,210 @@
 # HANDOVER — r1_face
 
 ## 1. Project Overview
-Animated character face (two blinking, looking eyes) for the Rabbit R1 device, deployed as a Creations web app.
+Animated character face ("Lepus") for the Rabbit R1 device, deployed as a Creations web app.
 
-**Stack:** Vanilla JS, HTML5 Canvas 2D, no dependencies. Single-file animation loop (`face.js`) + `index.html`. Hosted on GitHub Pages.
+**Stack:** Vanilla JS, HTML5 Canvas 2D, no dependencies. `face.js` + `index.html`. Hosted on GitHub Pages from branch `claude/rabbit-r1-character-bW1I9`.
 
----
-
-## 2. What We Did This Session
-
-- Cloned `muadibbles/r1_face` (branch `claude/rabbit-r1-character-bW1I9`) into `C:/Users/filla/projects/r1_face`
-- **Eye geometry:** Made eyes taller than wide (`EYE_RX=24`, `EYE_RY=27` at 240×282 scale)
-- **3 blink types** added: quick snap (45/30/70ms), normal (72/52/115ms), slow lazy (130/100/180ms) — picked randomly each blink
-- **Look-around state machine:** Both eyes shift together on X axis; idle wander with random targets from `LOOK_POSITIONS = [0,0,0,-10,10,-20,20]` (weighted center)
-- **Removed iris/pupil** — replaced dart-within-eye with whole-eye translation
-- **Slowed look transitions** 50% (`lookSpeed` range `0.2–0.9 px/ms`)
-- **Resized canvas** from 640×480 → 240×282 for R1 Creations screen, scaled all geometry proportionally
-- **GitHub Pages** enabled on `claude/rabbit-r1-character-bW1I9` branch → `https://muadibbles.github.io/r1_face/`
-- **QR code** generated (`r1_face_qr.png`) with correct Creations JSON payload format: `{title, url, description, iconUrl, themeColor}` — NOT a plain URL
-- **Accelerometer tilt:** Eyes shift in direction device is tilted using `window.creationSensors.accelerometer` API. Tiltx/Y blended additively on top of idle look. Retry loop added (polls every 100ms up to 5s) because API may not be injected at page load.
-- **Version display:** Small `v0.022` in lower-left corner (`11px monospace`, color `#4a4a6a`)
-- **Cache-busting:** `face.js?v=0.022` in script tag; QR URL uses `?v=022` param to force R1 fresh install
-- **TODO.md** created with all planned features
-
-**Files modified:** `face.js`, `index.html`, `TODO.md`, `r1_face_qr.png`
+**URL:** `https://muadibbles.github.io/r1_face/`  
+**Current version:** `v0.041`  
+**Deploy:** Push to `claude/rabbit-r1-character-bW1I9` → GitHub Pages serves it automatically. R1 reloads on Creation reopen.
 
 ---
 
-## 3. Current State
+## 2. Architecture Summary
 
-**Working:**
-- Blinking (3 random profiles), look-around idle, accelerometer tilt — all confirmed working on device at v0.022
-- GitHub Pages live at `https://muadibbles.github.io/r1_face/`
-- Cache-busting via QR URL versioning (`?v=022`) confirmed to force fresh install
+### face.js structure (top to bottom)
+1. `EMOTION_DEFAULTS` — 6 emotions with all per-emotion params
+2. `faceConfig` (from `window.faceConfig`) — global shape params + per-emotion overrides
+3. `cfg` — merged live config
+4. Migration block — upgrades old single-key params to new L/R split keys
+5. `state` — live animation state (lookX/Y, blinkPhase, tiltX/Y, mouthOpen, etc.)
+6. `emo` — current emotion with live interpolated values
+7. `mouth` — speaking animation state `{ open, target, queue, holdTimer }`
+8. `update(dt)` — per-frame logic: blink, look, mouth, speaking→idle detection
+9. `drawBackground`, `drawEye`, `drawBrow`, `drawMouth`, `drawHUD`
+10. `__faceDebug` — public API: `setEmotion`, `getEmotion`, `speakText`, `stopSpeaking`
+11. Scroll wheel emotion cycling (`scrollUp` / `scrollDown`)
+12. `LEPUS_PROMPT` — personality system prompt
+13. `ON_R1` guard — voice pipeline only runs when `PluginMessageHandler` is defined
+14. Voice pipeline (see §4 below)
+15. Main `loop()` via `requestAnimationFrame`
 
-**Known issues / incomplete:**
-- Accelerometer tilt field names assumed to be `data.tiltX` / `data.tiltY` based on SDK docs — confirmed working but worth noting if behavior breaks after an OS update
-- No vertical component in idle look-around (only X wander); tiltY handles vertical only via accelerometer
+### Emotions
+`neutral`, `happy`, `attentive`, `thinking`, `tired`, `surprised`
+
+Each has these per-emotion params:
+- **Brows:** `browYOffsetL/R` (px above eye center, negative = higher), `browCurveL/R`, `browSpacing`, `browAngle`, `browXSpan`, `browThickness`
+- **Mouth:** `mouthY`, `mouthWidth`, `mouthCurve`, `mouthAngle`, `mouthThickness`, `mouthOpenMax`
+
+### Global config params (set once in faceConfig)
+```
+eyeRx, eyeRy, eyeOffsetY, eyeSpacing, eyeColor, eyeTilt
+eyeRxOffsetL/R, eyeRyOffsetL/R   ← per-eye delta offsets
+mouthColor, mouthInteriorColor
+lookWaitMin/Max, lookSpeed, blinkIntervalMin/Max
+```
 
 ---
 
-## 4. Key Decisions & Rationale
+## 3. What Was Built (since previous HANDOVER)
 
-- **Whole-eye translation vs iris/pupil:** Removed iris/pupil — the R1 face is stylized/minimal; moving the whole eye looks cleaner at small scale
-- **Additive tilt + idle look:** Tilt offset (`state.tiltX/Y`) adds on top of idle look (`state.lookX`) rather than replacing it — keeps character feeling alive even when held still
-- **Retry loop for accelerometer init:** `window.creationSensors` is injected by the R1 WebView after page load, not synchronously — a plain `if (!window.creationSensors) return` silently failed
-- **QR code format:** R1 Creations requires `JSON.stringify({title,url,description,iconUrl,themeColor})` as QR data — plain URL QR codes are rejected by the device
-- **Cache busting via QR URL versioning:** R1 caches at the creation install level; cache-control meta tags and script query strings alone don't help — the install URL itself must change
+### Phase 1 — Eyebrow rework
+- Brows now positioned in **eye-local space** then rotated by `eyeTilt` into canvas space — they follow eye rotation/position automatically
+- **Per-side Y offset and curve:** `browYOffsetL/R`, `browCurveL/R` — independent per brow
+- `browThickness: 0` hides brows entirely (early-return guard prevents canvas hairline artifact)
+- Migration: old single `browYOffset`/`browCurve` keys auto-promoted to `L/R` on load
+
+### Phase 2 — Per-eye shape offsets
+- `eyeRxOffsetL/R`, `eyeRyOffsetL/R` — delta sliders in designer add on top of global `eyeRx/Ry`
+- Allows independent eye sizing (e.g. lazy eye, asymmetric designs)
+
+### Phase 3 — Mouth system
+- `drawMouth()`: quadratic bezier arc; filled interior when `openH >= 0.5`
+- `mouthThickness: 0` hides mouth (early-return guard, same pattern as brows)
+- `mouthAngle` rotates the whole mouth
+- `mouth` state object: `{ open, target, queue, holdTimer }`
+- `speakText(text)`: splits words, schedules open/close at ~140wpm (430ms/word), vowel heuristic drives open amount
+- `stopSpeaking()`: clears queue, target → 0
+- Speaking → idle detection: when `mouth.queue` empty + `target === 0` + `open < 0.02`
+
+### Phase 4 — Look suspension during speaking
+- While `voiceState === 'speaking'`: eyes drift back to X=0 center, look state machine paused
+- Normal look resumes when speaking ends
+
+### Phase 5 — Personality: Lepus
+```
+Dry, deadpan, self-aware. Knows it's an AI on a Rabbit R1.
+Conversational, not terse. Says what it means.
+```
+- `LEPUS_PROMPT` constant injected with current `emo.name` in every LLM call
+
+### Phase 6 — LLM voice pipeline (ON_R1 only)
+Full pipeline: PTT hold → record → STT → LLM → speak + animate
+
+**voiceState:** `'idle'` | `'listening'` | `'processing'` | `'speaking'`  
+**voiceStep:** `''` | `'webSpeech'` | `'stt'` | `'llm'` — sub-state shown in HUD
+
+**Shared (both STT paths):**
+- `sendToLLM(transcript)`: builds full message with LEPUS_PROMPT + emotion context, calls `PluginMessageHandler.postMessage({message, useLLM:true, wantsR1Response:true})`, sets 20s timeout guard
+- `window.onPluginMessage(evt)`: parses `JSON.parse(evt.data).response || .message` → calls `speakText(reply)`, sets voiceState → `'speaking'`
+
+**Primary STT — Web Speech API** (if `window.SpeechRecognition || window.webkitSpeechRecognition` exists):
+- `longPressStart` → `recognition.start()` → `voiceState = 'listening'`
+- `longPressEnd` → `recognition.stop()` → `voiceState = 'processing', voiceStep = 'webSpeech'`
+- `recognition.onend` → sends transcript to `sendToLLM` or resets to idle
+- **8s hard reset timer** set on `longPressEnd` — clears on `onend`/`onerror` — guards against recognition service being unreachable (R1 AOSP may not have Google speech servers)
+
+**Fallback STT — MediaRecorder + Whisper** (if Web Speech API unavailable):
+- `navigator.mediaDevices.getUserMedia({ audio: true })` → `MediaRecorder` → `audio/webm;codecs=opus`
+- POSTs blob to `https://masatrad-whisper.hf.space/asr?output=txt&language=en`
+- **Timeout:** `Promise.race([fetchP, 20s dead promise])` — more reliable than AbortController on some WebViews
+- Warmup ping (GET, no-cors) to HuggingFace Space on page load
+
+### Phase 7 — HUD improvements
+- Version in lower-left: `v0.041`
+- Emotion name + voiceTag in lower-right: e.g. `thinking · processing:llm`
+- Status dot **upper-right** `(W-10, 10)` r=4: red = listening, amber = processing
+
+### Phase 8 — Designer (designer.html)
+- **Mouth accordion** (open by default): mouthY, mouthWidth, mouthCurve, mouthAngle, mouthThickness, mouthOpenMax
+- **Per-emotion mouth switching** with buttons at top of accordion
+- **"Speak test" button** calls `__faceDebug.speakText("Hello there, how are you?")`
+- **Brow section:** browYOffsetL/R, browCurveL/R, browSpacing, browAngle, browXSpan, browThickness
+- **Per-eye offsets section:** eyeRxOffsetL/R, eyeRyOffsetL/R delta sliders (±30px)
+- **Export fix:** strips existing `faceConfig` blocks before injecting, so exports don't stack
 
 ---
 
-## 5. Pitfalls & Lessons Learned
+## 4. Current Status
 
-- **Plain URL QR = invalid** on R1. Always use the JSON payload format.
-- **R1 caches aggressively** — reinstalling doesn't help unless the QR URL itself is different. Always bump `?v=` in both the script tag and the QR install URL together.
-- **`window.creationSensors` is async-injected** — always use the retry loop pattern, not a synchronous check.
-- **GitHub Pages serves the right content** but the R1 may still show old version — check Pages with `curl` before debugging the device.
-- **Write tool was blocked** early in session (user permission mode) — use `Edit` for targeted changes to existing files instead of full rewrites.
+### Working on device
+- Face renders, animates, blinks, looks around
+- Scroll wheel (scrollUp/scrollDown) cycles emotions
+- PTT (longPressStart/End) triggers voice pipeline
+- voiceState transitions: idle → listening → processing → (speaking or idle)
+- Status dot position correct (upper right)
+- HUD sub-state labels working (`processing:webSpeech`, `processing:llm`, etc.)
+
+### Active bug being debugged
+**`processing:webSpeech` hangs** — Web Speech API is available in the R1 WebView (object exists) but `recognition.onend` never fires. Root cause likely: AOSP-based R1 doesn't have Google Play Services / Google speech recognition backend.
+
+**Mitigation in place:** 8s hard reset timer prevents permanent hang. Face resets to neutral after 8s.
+
+**Next debugging step:** ADB logcat to see console errors from the WebView. User has R1 plugged in. Need to install ADB:
+```bash
+sudo apt install adb        # Linux
+brew install android-platform-tools  # Mac
+```
+Then:
+```bash
+adb devices                          # confirm device visible, accept prompt on R1
+adb logcat | grep -i "chromium\|webview\|console\|speechrecog"
+```
+
+### Outstanding question
+Does `wantsR1Response: true` in `PluginMessageHandler.postMessage` cause the LLM to call `window.onPluginMessage`, or does it only speak through the R1 speaker with no JS callback? Not yet confirmed because STT hasn't successfully produced a transcript yet.
 
 ---
 
-## 6. Next Steps (from TODO.md, in priority order)
+## 5. Key API Facts
 
-1. **PTT button** (`window.addEventListener('sideClick', ...)`) — trigger attentive/listening expression on press
-2. **Smooth ease-in/out** on look transitions — replace linear `Math.sign(dx) * step` with an easing curve
-3. **Squint** — compress `EYE_RY` slightly on a timer for suspicion/thinking idle variation
-4. **Eyebrows** — arc shapes above eyes that raise/furrow/angle; adds a lot of expressiveness
-5. **Double-blink** — two quick blinks back to back (occasional)
-6. **Asymmetric blinks** — right eye delayed ~20ms behind left for organic feel
-7. **Wide eyes** — brief `EYE_RY` expansion when startled (could hook to PTT long press)
-8. **Eyelash fringe** — short lines along ellipse curve at lid edge
-9. **Eye gloss** — small white arc highlight inside eye
-10. **R1 state reactivity** — respond to thinking/speaking/idle states (requires Rabbit API research)
+### R1 Creations API
+| API | Notes |
+|-----|-------|
+| `PluginMessageHandler.postMessage(JSON.stringify({message, useLLM, wantsR1Response}))` | Sends to native R1 LLM |
+| `window.onPluginMessage(evt)` | Callback — `JSON.parse(evt.data).response` or `.message` has the text |
+| `window.addEventListener('longPressStart', fn)` | PTT press |
+| `window.addEventListener('longPressEnd', fn)` | PTT release |
+| `window.addEventListener('scrollUp', fn)` | Scroll wheel up |
+| `window.addEventListener('scrollDown', fn)` | Scroll wheel down |
+| `window.addEventListener('sideClick', fn)` | Side button (currently unused) |
+| `window.creationSensors.accelerometer` | Tilt data |
+| `creationStorage` | Persistent on-device storage (not yet used) |
+| `const ON_R1 = typeof PluginMessageHandler !== 'undefined'` | Guard for desktop designer |
 
-**To deploy any update:**
-1. Edit `face.js` and bump version string in comment + `VERSION` constant
-2. Update `?v=` query string in `index.html` script tag to match
-3. `git add . && git commit && git push`
-4. Regenerate `r1_face_qr.png` with new `?v=` in the URL using the Python snippet in this session
-5. Scan new QR on R1 to install fresh
+### Deployment
+- Branch: `claude/rabbit-r1-character-bW1I9`
+- GitHub Pages serves this branch automatically
+- R1 loads from the Pages URL — no manual upload needed
+- To update: push to branch → reload Creation on R1
+
+---
+
+## 6. File Map
+
+| File | Purpose |
+|------|---------|
+| `face.js` | All animation + voice pipeline. Self-contained. |
+| `index.html` | Shell: canvas + baked `window.faceConfig` block + `<script src="face.js?v=0.041">` |
+| `designer.html` | Local design tool. Opens face in iframe, live sliders, export button. Never deployed to R1. |
+| `llm_face_plan.md` | Original architecture plan (Phases 1–5). Partially executed. |
+| `TODO.md` | Feature backlog |
+| `HANDOVER.md` | This file |
+
+---
+
+## 7. Known Pitfalls
+
+- **`clearTimeout` before `res.text()`** was a bug (now fixed) — timeout must stay active through the full body read, not just the headers
+- **`onPluginMessage` data format** — argument is a MessageEvent-like object; text is in `JSON.parse(evt.data).response`, NOT `evt.message` or `evt.data` directly
+- **`browThickness: 0` / `mouthThickness: 0`** — Canvas strokes at lineWidth=0 still render a hairline. Must early-return before calling `ctx.stroke()`.
+- **Duplicate faceConfig blocks** — export used to append rather than replace. Fixed with regex strip before inject.
+- **HuggingFace free tier Spaces sleep** after ~5 min idle. Warmup ping on load helps but doesn't fully solve it.
+- **Web Speech API on R1 AOSP** — object exists in WebView but backend may be unreachable. Always add a hard reset timer.
+- **GitHub Pages only serves one branch** — confirm Pages is configured for `claude/rabbit-r1-character-bW1I9` in repo Settings → Pages.
+
+---
+
+## 8. TODO (priority order)
+
+1. **Fix STT** — ADB logcat to confirm Web Speech API error; if AOSP has no backend, detect and skip directly to Whisper fallback
+2. **Confirm PluginMessageHandler LLM callback** — once STT works, verify `onPluginMessage` fires with the expected data format
+3. **Brows dip ~10px during blink** — feels connected to same skin as eyes
+4. **Single-file export** — inline `face.js` into `index.html` so no second fetch needed
+5. **sideClick repurpose** — tap side button for something (voice mode toggle? debug?)
+6. **Pupils** — dark iris/pupil inside each eye
+7. **Eyelids** — visible lid shapes
+8. **Conversation memory** — pass prior turns in LLM prompt
+9. **System prompt designer control** — editable LEPUS_PROMPT in designer
+10. **creationStorage** — persist conversation history across sessions
