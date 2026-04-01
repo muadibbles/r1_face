@@ -452,8 +452,9 @@ window.FACE_EASINGS = {
   }
 
   // ── Voice state ──────────────────────────────────────────────────────
-  // 'idle' | 'listening' | 'processing'
+  // 'idle' | 'listening' | 'processing' | 'speaking'
   let voiceState = 'idle';
+  let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
   const VERSION = 'v0.038';
   function drawHUD() {
@@ -465,18 +466,20 @@ window.FACE_EASINGS = {
     ctx.fillText(VERSION, 4, H - 4);
 
     ctx.textAlign = 'right';
-    const voiceTag = voiceState !== 'idle' ? ' · ' + voiceState : '';
+    const voiceTag = voiceState !== 'idle'
+      ? ' · ' + voiceState + (voiceStep ? ':' + voiceStep : '')
+      : '';
     ctx.fillText(emo.name + voiceTag, W - 4, H - 4);
 
-    // Listening indicator — red dot bottom-center
+    // Status dot — upper right
     if (voiceState === 'listening') {
       ctx.beginPath();
-      ctx.arc(W / 2, H - 7, 3.5, 0, Math.PI * 2);
+      ctx.arc(W - 10, 10, 4, 0, Math.PI * 2);
       ctx.fillStyle = '#ff3333';
       ctx.fill();
     } else if (voiceState === 'processing') {
       ctx.beginPath();
-      ctx.arc(W / 2, H - 7, 3.5, 0, Math.PI * 2);
+      ctx.arc(W - 10, 10, 4, 0, Math.PI * 2);
       ctx.fillStyle = '#ffaa22';
       ctx.fill();
     }
@@ -564,6 +567,7 @@ window.FACE_EASINGS = {
       if (recorder && recorder.state !== 'inactive') recorder.stop();
       if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
       voiceState = 'processing';
+      voiceStep  = 'stt';
       window.__faceDebug.setEmotion('thinking');
     }
 
@@ -574,6 +578,7 @@ window.FACE_EASINGS = {
       window.__lepusState.lastTranscript = transcript;
       if (!transcript) {
         voiceState = 'idle';
+        voiceStep  = '';
         window.__faceDebug.setEmotion('neutral');
         return;
       }
@@ -584,13 +589,16 @@ window.FACE_EASINGS = {
       const emotionCtx  = `Your face is currently expressing: ${emo.name}`;
       const fullMessage = `${LEPUS_PROMPT}\n${emotionCtx}\n\nUser: ${transcript}`;
 
-      // Timeout guard — reset if no response within 15s
+      voiceStep = 'llm';   // HUD now shows "processing:llm"
+
+      // Timeout guard — reset if no response within 20s
       window.__lepusState.llmTimeout = setTimeout(() => {
         if (voiceState === 'processing') {
           voiceState = 'idle';
+          voiceStep  = '';
           window.__faceDebug.setEmotion('neutral');
         }
-      }, 15000);
+      }, 20000);
 
       PluginMessageHandler.postMessage(JSON.stringify({
         message:          fullMessage,
@@ -611,6 +619,7 @@ window.FACE_EASINGS = {
         // Fallback in case the runtime passes a plain object or string directly
         reply = (evt.message || (typeof evt.data === 'string' ? evt.data : '') || '').trim();
       }
+      voiceStep = '';
       if (!reply) {
         voiceState = 'idle';
         window.__faceDebug.setEmotion('neutral');
@@ -639,6 +648,7 @@ window.FACE_EASINGS = {
         clearTimeout(timeout);
         console.error('STT error:', e);
         voiceState = 'idle';
+        voiceStep  = '';
         window.__faceDebug.setEmotion('neutral');
         return '';
       }
