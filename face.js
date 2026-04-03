@@ -565,27 +565,88 @@ window.FACE_EASINGS = {
 
     // Deep probes
     probeObj('FlutterButtonHandler', window.FlutterButtonHandler);
-    probeObj('touchEventHandler', window.touchEventHandler);
+    probeObj('TouchEventHandler', window.TouchEventHandler);
     probeObj('AccelerometerHandler', window.AccelerometerHandler);
     probeObj('CreationStorageHandler', window.CreationStorageHandler);
-    probeObj('CreationMutexHandler', window.CreationMutexHandler);
+    probeObj('CreationVoiceHandler', window.CreationVoiceHandler);
 
     // creationSensors
     probeObj('creationSensors', window.creationSensors);
 
-    // creationStorage own methods (not proto builtins)
-    if (typeof creationStorage !== 'undefined') {
-      lines.push('--- cStorage methods ---');
-      const own = Object.keys(creationStorage);
-      own.forEach(k => {
-        let t = '?'; try { t = typeof creationStorage[k]; } catch(e) {}
-        lines.push('  ' + k + ' (' + t + ')');
+    // Deep dive: creationSensors.accelerometer
+    if (window.creationSensors && window.creationSensors.accelerometer) {
+      const acc = window.creationSensors.accelerometer;
+      lines.push('--- accel deep ---');
+      const aKeys = Object.keys(acc);
+      aKeys.forEach(k => {
+        let t = '?', v = '';
+        try { t = typeof acc[k]; } catch(e) {}
+        try {
+          if (t === 'number') v = ' = ' + acc[k].toFixed(3);
+          else if (t === 'string') v = ' = "' + acc[k].slice(0,20) + '"';
+          else if (t === 'boolean') v = ' = ' + acc[k];
+        } catch(e) {}
+        lines.push('  ' + k + ' (' + t + ')' + v);
       });
-      // try calling getItem/setItem/keys to see if they exist
-      ['getItem','setItem','removeItem','clear','keys','length','plan'].forEach(m => {
-        let exists = '?';
-        try { exists = typeof creationStorage[m]; } catch(e) { exists = 'ERR'; }
-        lines.push('  .' + m + ' = ' + exists);
+    }
+
+    // Deep dive: CreationVoiceHandler
+    if (typeof window.CreationVoiceHandler !== 'undefined') {
+      lines.push('--- VoiceHandler DEEP ---');
+      // Try postMessage with various probe payloads and log what happens
+      // First just document its shape
+      const vh = window.CreationVoiceHandler;
+      try {
+        lines.push('  str: ' + String(vh.postMessage));
+      } catch(e) {
+        lines.push('  str ERR: ' + e.message);
+      }
+      // Check for common voice-related window callbacks
+      ['onVoiceResult','onSpeechResult','onTTSComplete','onSTTResult',
+       'onCreationVoice','onVoiceMessage','onVoiceEvent'].forEach(cb => {
+        lines.push('  win.' + cb + ': ' + typeof window[cb]);
+      });
+    }
+
+    // Deep dive: creationStorage.plain and .secure
+    if (typeof creationStorage !== 'undefined') {
+      lines.push('--- cStorage shape ---');
+      ['plain','secure'].forEach(sub => {
+        if (creationStorage[sub]) {
+          const obj = creationStorage[sub];
+          lines.push(' .' + sub + ' typeof: ' + typeof obj);
+          const keys = Object.keys(obj);
+          if (keys.length) {
+            keys.forEach(k => {
+              let t = '?'; try { t = typeof obj[k]; } catch(e) {}
+              let v = '';
+              try {
+                if (t === 'string') v = '="' + obj[k].slice(0,20) + '"';
+                else if (t === 'number') v = '=' + obj[k];
+              } catch(e) {}
+              lines.push('   ' + k + '(' + t + ')' + v);
+            });
+          }
+          // Try proto methods
+          try {
+            const proto = Object.getPrototypeOf(obj);
+            if (proto && proto !== Object.prototype) {
+              const builtins2 = new Set(['constructor','__defineGetter__','__defineSetter__',
+                'hasOwnProperty','__lookupGetter__','__lookupSetter__','isPrototypeOf',
+                'propertyIsEnumerable','toString','valueOf','__proto__','toLocaleString']);
+              const pKeys = Object.getOwnPropertyNames(proto).filter(k => !builtins2.has(k));
+              if (pKeys.length) {
+                lines.push('   proto:');
+                pKeys.forEach(k => {
+                  let t = '?'; try { t = typeof proto[k]; } catch(e) {}
+                  lines.push('    ' + k + '(' + t + ')');
+                });
+              }
+            }
+          } catch(e) {}
+        } else {
+          lines.push(' .' + sub + ': missing');
+        }
       });
     }
 
