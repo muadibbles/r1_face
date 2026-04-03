@@ -456,7 +456,7 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.047';
+  const VERSION = 'v0.048';
 
   // ── Pipeline error log (shown in diag) ────────────────────────────────
   const pipeLog = [];
@@ -870,8 +870,10 @@ window.FACE_EASINGS = {
       if (!recorderMime) recorderMime = ''; // let browser pick default
       pipeLogPush('mime: ' + (recorderMime || 'default'));
 
-      let mediaStream = null, recorder = null, audioChunks = [], recordTimer = null;
-      let pendingStop = false;  // true if longPressEnd fired before recorder was ready
+      // ── Pre-acquire mic on load (eliminates 10s+ getUserMedia delay on PTT) ──
+      let micStream = null;
+      let micReady  = false;
+      let recorder = null, audioChunks = [], recordTimer = null;
       const MAX_RECORD_MS = 30000;
 
       // Global safety: if stuck in processing for >30s, force reset
@@ -887,109 +889,124 @@ window.FACE_EASINGS = {
         }, 30000);
       }
 
-      function finishRecording() {
-        pipeLogPush('finishRecording, state=' + (recorder ? recorder.state : 'null'));
-        if (!recorder || recorder.state === 'inactive') {
-          pipeLogPush('WARN: recorder not active');
-          // No recording happened — bail out
-          if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
-          voiceState = 'idle'; voiceStep = '';
-          window.__faceDebug.setEmotion('neutral');
-          return;
+      function acquireMic() {
+        pipeLogPush('mic: acquiring...');
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+          micStream = stream;
+          micReady = true;
+          pipeLogPush('mic: READY');
+        }).catch(e => {
+          pipeLogPush('mic acquire ERR: ' + e.message);
+          // Retry in 5s
+          setTimeout(acquireMic, 5000);
+        });
+      }
+
+      // Start acquiring mic immediately
+      acquireMic();
+
+      function createRecorder() {
+        if (!micStream) return null;
+        const opts = recorderMime ? { mimeType: recorderMime } : {};
+        let rec;
+        try {
+          rec = new MediaRecorder(micStream, opts);
+        } catch(e) {
+          pipeLogPush('MR fallback: ' + e.message);
+          rec = new MediaRecorder(micStream);
         }
-        voiceState = 'processing'; voiceStep = 'stt';
-        window.__faceDebug.setEmotion('thinking');
-        startProcessingGuard();
-        // Request all data then stop
-        recorder.requestData();
-        recorder.stop();
-        // Stop mic AFTER onstop fires (not before)
-        pipeLogPush('recorder.stop() called');
+        return rec;
       }
 
       window.addEventListener('longPressStart', () => {
         if (diagVisible) return;
         if (voiceState !== 'idle') return;
+
+        if (!micReady || !micStream) {
+          pipeLogPush('PTT: mic not ready yet');
+          return;
+        }
+
+        // Check mic stream is still alive (tracks can end unexpectedly)
+        const track = micStream.getAudioTracks()[0];
+        if (!track || track.readyState === 'ended') {
+          pipeLogPush('PTT: mic track dead, re-acquiring');
+          micReady = false;
+          acquireMic();
+          return;
+        }
+
         voiceState = 'listening';
-        pendingStop = false;
         window.__faceDebug.setEmotion('attentive');
-        pipeLogPush('mic: requesting...');
-        navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-          mediaStream = stream;
-          audioChunks = [];
-          const opts = recorderMime ? { mimeType: recorderMime } : {};
-          try {
-            recorder = new MediaRecorder(stream, opts);
-          } catch(e) {
-            pipeLogPush('MR fallback: ' + e.message);
-            recorder = new MediaRecorder(stream);
-          }
-          pipeLogPush('rec mime: ' + (recorder.mimeType || '?'));
+        audioChunks = [];
 
-          recorder.ondataavailable = e => {
-            if (e.data.size > 0) audioChunks.push(e.data);
-            pipeLogPush('chunk: ' + e.data.size + 'b');
-          };
+        recorder = createRecorder();
+        if (!recorder) {
+          pipeLogPush('PTT: recorder creation failed');
+          voiceState = 'idle';
+          window.__faceDebug.setEmotion('neutral');
+          return;
+        }
 
-          recorder.onstop = async () => {
-            pipeLogPush('onstop fired, chunks=' + audioChunks.length);
-            // NOW safe to kill mic
-            if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
-            const mimeUsed = recorder.mimeType || 'audio/webm';
-            const blob = new Blob(audioChunks, { type: mimeUsed });
-            pipeLogPush('blob: ' + blob.size + 'b ' + mimeUsed);
-            if (blob.size < 100) {
-              pipeLogPush('WARN: blob too small');
-              voiceState = 'idle'; voiceStep = '';
-              window.__faceDebug.setEmotion('neutral');
-              return;
-            }
-            const transcript = await transcribeAudio(blob);
-            window.__lepusState.lastTranscript = transcript;
-            pipeLogPush('stt: "' + (transcript || '(empty)').slice(0,40) + '"');
-            if (!transcript) {
-              voiceState = 'idle'; voiceStep = '';
-              window.__faceDebug.setEmotion('neutral');
-              return;
-            }
-            sendToLLM(transcript);
-          };
+        recorder.ondataavailable = e => {
+          if (e.data.size > 0) audioChunks.push(e.data);
+          pipeLogPush('chunk: ' + e.data.size + 'b');
+        };
 
-          recorder.onerror = (e) => {
-            pipeLogPush('REC ERR: ' + (e.error ? e.error.name : 'unknown'));
-            if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+        recorder.onstop = async () => {
+          pipeLogPush('onstop, chunks=' + audioChunks.length);
+          const mimeUsed = recorder.mimeType || 'audio/webm';
+          const blob = new Blob(audioChunks, { type: mimeUsed });
+          pipeLogPush('blob: ' + blob.size + 'b');
+          if (blob.size < 100) {
+            pipeLogPush('WARN: blob too small');
             voiceState = 'idle'; voiceStep = '';
             window.__faceDebug.setEmotion('neutral');
-          };
-
-          // Use timeslice to get data chunks during recording (not just at stop)
-          recorder.start(500);  // emit data every 500ms
-          pipeLogPush('recording (500ms slices)...');
-          recordTimer = setTimeout(() => finishRecording(), MAX_RECORD_MS);
-
-          // If longPressEnd already fired while we were waiting for getUserMedia
-          if (pendingStop) {
-            pipeLogPush('pendingStop: finishing now');
-            clearTimeout(recordTimer);
-            // Give it a moment to capture at least one chunk
-            setTimeout(() => finishRecording(), 300);
+            return;
           }
-        }).catch(e => {
-          pipeLogPush('MIC ERR: ' + e.message);
-          voiceState = 'idle'; window.__faceDebug.setEmotion('neutral');
-        });
+          const transcript = await transcribeAudio(blob);
+          window.__lepusState.lastTranscript = transcript;
+          pipeLogPush('stt: "' + (transcript || '(empty)').slice(0,40) + '"');
+          if (!transcript) {
+            voiceState = 'idle'; voiceStep = '';
+            window.__faceDebug.setEmotion('neutral');
+            return;
+          }
+          sendToLLM(transcript);
+        };
+
+        recorder.onerror = (e) => {
+          pipeLogPush('REC ERR: ' + (e.error ? e.error.name : 'unknown'));
+          voiceState = 'idle'; voiceStep = '';
+          window.__faceDebug.setEmotion('neutral');
+        };
+
+        recorder.start(500);
+        pipeLogPush('recording...');
+        recordTimer = setTimeout(() => finishRecording(), MAX_RECORD_MS);
       });
+
+      function finishRecording() {
+        if (voiceState !== 'listening') return;
+        clearTimeout(recordTimer);
+        voiceState = 'processing'; voiceStep = 'stt';
+        window.__faceDebug.setEmotion('thinking');
+        startProcessingGuard();
+        if (recorder && recorder.state === 'recording') {
+          recorder.requestData();
+          recorder.stop();
+          pipeLogPush('recorder stopped');
+        } else {
+          pipeLogPush('WARN: recorder not recording (' + (recorder ? recorder.state : 'null') + ')');
+          voiceState = 'idle'; voiceStep = '';
+          window.__faceDebug.setEmotion('neutral');
+        }
+      }
 
       window.addEventListener('longPressEnd', () => {
         clearTimeout(recordTimer);
         if (voiceState !== 'listening') return;
-        if (!recorder || recorder.state !== 'recording') {
-          // Recorder not ready yet — flag for when it starts
-          pipeLogPush('longPressEnd: recorder not ready, pending');
-          pendingStop = true;
-          return;
-        }
-        pipeLogPush('longPressEnd: finishing');
+        pipeLogPush('PTT released');
         finishRecording();
       });
 
