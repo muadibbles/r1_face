@@ -456,7 +456,7 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.046';
+  const VERSION = 'v0.047';
 
   // ── Pipeline error log (shown in diag) ────────────────────────────────
   const pipeLog = [];
@@ -871,54 +871,8 @@ window.FACE_EASINGS = {
       pipeLogPush('mime: ' + (recorderMime || 'default'));
 
       let mediaStream = null, recorder = null, audioChunks = [], recordTimer = null;
+      let pendingStop = false;  // true if longPressEnd fired before recorder was ready
       const MAX_RECORD_MS = 30000;
-
-      window.addEventListener('longPressStart', () => {
-        if (diagVisible) return;
-        if (voiceState !== 'idle') return;
-        voiceState = 'listening';
-        window.__faceDebug.setEmotion('attentive');
-        pipeLogPush('mic: requesting...');
-        navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-          mediaStream = stream;
-          audioChunks = [];
-          const opts = recorderMime ? { mimeType: recorderMime } : {};
-          try {
-            recorder = new MediaRecorder(stream, opts);
-          } catch(e) {
-            pipeLogPush('MR fallback: ' + e.message);
-            recorder = new MediaRecorder(stream);
-          }
-          pipeLogPush('rec mime: ' + (recorder.mimeType || '?'));
-          recorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
-          recorder.onstop = async () => {
-            const mimeUsed = recorder.mimeType || 'audio/webm';
-            const blob = new Blob(audioChunks, { type: mimeUsed });
-            pipeLogPush('blob: ' + blob.size + 'b ' + mimeUsed);
-            if (blob.size < 1000) {
-              pipeLogPush('WARN: blob too small, skipping STT');
-              voiceState = 'idle'; voiceStep = '';
-              window.__faceDebug.setEmotion('neutral');
-              return;
-            }
-            const transcript = await transcribeAudio(blob);
-            window.__lepusState.lastTranscript = transcript;
-            pipeLogPush('stt: "' + (transcript || '(empty)').slice(0,40) + '"');
-            if (!transcript) {
-              voiceState = 'idle'; voiceStep = '';
-              window.__faceDebug.setEmotion('neutral');
-              return;
-            }
-            sendToLLM(transcript);
-          };
-          recorder.start();
-          pipeLogPush('recording...');
-          recordTimer = setTimeout(() => stopListening(), MAX_RECORD_MS);
-        }).catch(e => {
-          pipeLogPush('MIC ERR: ' + e.message);
-          voiceState = 'idle'; window.__faceDebug.setEmotion('neutral');
-        });
-      });
 
       // Global safety: if stuck in processing for >30s, force reset
       let processingGuard = null;
@@ -933,18 +887,111 @@ window.FACE_EASINGS = {
         }, 30000);
       }
 
-      function stopListening() {
-        if (voiceState !== 'listening') return;
-        clearTimeout(recordTimer);
-        if (recorder && recorder.state !== 'inactive') recorder.stop();
-        if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+      function finishRecording() {
+        pipeLogPush('finishRecording, state=' + (recorder ? recorder.state : 'null'));
+        if (!recorder || recorder.state === 'inactive') {
+          pipeLogPush('WARN: recorder not active');
+          // No recording happened — bail out
+          if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+          voiceState = 'idle'; voiceStep = '';
+          window.__faceDebug.setEmotion('neutral');
+          return;
+        }
         voiceState = 'processing'; voiceStep = 'stt';
         window.__faceDebug.setEmotion('thinking');
-        pipeLogPush('stopped, processing...');
         startProcessingGuard();
+        // Request all data then stop
+        recorder.requestData();
+        recorder.stop();
+        // Stop mic AFTER onstop fires (not before)
+        pipeLogPush('recorder.stop() called');
       }
 
-      window.addEventListener('longPressEnd', stopListening);
+      window.addEventListener('longPressStart', () => {
+        if (diagVisible) return;
+        if (voiceState !== 'idle') return;
+        voiceState = 'listening';
+        pendingStop = false;
+        window.__faceDebug.setEmotion('attentive');
+        pipeLogPush('mic: requesting...');
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+          mediaStream = stream;
+          audioChunks = [];
+          const opts = recorderMime ? { mimeType: recorderMime } : {};
+          try {
+            recorder = new MediaRecorder(stream, opts);
+          } catch(e) {
+            pipeLogPush('MR fallback: ' + e.message);
+            recorder = new MediaRecorder(stream);
+          }
+          pipeLogPush('rec mime: ' + (recorder.mimeType || '?'));
+
+          recorder.ondataavailable = e => {
+            if (e.data.size > 0) audioChunks.push(e.data);
+            pipeLogPush('chunk: ' + e.data.size + 'b');
+          };
+
+          recorder.onstop = async () => {
+            pipeLogPush('onstop fired, chunks=' + audioChunks.length);
+            // NOW safe to kill mic
+            if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+            const mimeUsed = recorder.mimeType || 'audio/webm';
+            const blob = new Blob(audioChunks, { type: mimeUsed });
+            pipeLogPush('blob: ' + blob.size + 'b ' + mimeUsed);
+            if (blob.size < 100) {
+              pipeLogPush('WARN: blob too small');
+              voiceState = 'idle'; voiceStep = '';
+              window.__faceDebug.setEmotion('neutral');
+              return;
+            }
+            const transcript = await transcribeAudio(blob);
+            window.__lepusState.lastTranscript = transcript;
+            pipeLogPush('stt: "' + (transcript || '(empty)').slice(0,40) + '"');
+            if (!transcript) {
+              voiceState = 'idle'; voiceStep = '';
+              window.__faceDebug.setEmotion('neutral');
+              return;
+            }
+            sendToLLM(transcript);
+          };
+
+          recorder.onerror = (e) => {
+            pipeLogPush('REC ERR: ' + (e.error ? e.error.name : 'unknown'));
+            if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+            voiceState = 'idle'; voiceStep = '';
+            window.__faceDebug.setEmotion('neutral');
+          };
+
+          // Use timeslice to get data chunks during recording (not just at stop)
+          recorder.start(500);  // emit data every 500ms
+          pipeLogPush('recording (500ms slices)...');
+          recordTimer = setTimeout(() => finishRecording(), MAX_RECORD_MS);
+
+          // If longPressEnd already fired while we were waiting for getUserMedia
+          if (pendingStop) {
+            pipeLogPush('pendingStop: finishing now');
+            clearTimeout(recordTimer);
+            // Give it a moment to capture at least one chunk
+            setTimeout(() => finishRecording(), 300);
+          }
+        }).catch(e => {
+          pipeLogPush('MIC ERR: ' + e.message);
+          voiceState = 'idle'; window.__faceDebug.setEmotion('neutral');
+        });
+      });
+
+      window.addEventListener('longPressEnd', () => {
+        clearTimeout(recordTimer);
+        if (voiceState !== 'listening') return;
+        if (!recorder || recorder.state !== 'recording') {
+          // Recorder not ready yet — flag for when it starts
+          pipeLogPush('longPressEnd: recorder not ready, pending');
+          pendingStop = true;
+          return;
+        }
+        pipeLogPush('longPressEnd: finishing');
+        finishRecording();
+      });
 
       async function transcribeAudio(blob) {
         const TIMEOUT_MS = 12000;  // 12s per endpoint (was 25s — too long)
