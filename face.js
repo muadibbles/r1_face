@@ -456,7 +456,91 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.042';
+  const VERSION = 'v0.043';
+
+  // ── Diagnostic probe (sideClick toggles overlay) ─────────────────────
+  let diagVisible = false;
+  let diagLines   = null;
+
+  function probeDiag() {
+    const lines = [];
+    lines.push('-- R1 PROBE --');
+    lines.push('UA: ' + (navigator.userAgent || '?').slice(0, 60));
+    lines.push('UA2: ' + (navigator.userAgent || '').slice(60, 120));
+
+    // R1-specific globals
+    const r1Keys = Object.keys(window).filter(k =>
+      /plugin|creation|rabbit|handler|sensor/i.test(k)
+    );
+    lines.push('R1 globals: ' + (r1Keys.length ? r1Keys.join(', ') : 'NONE'));
+
+    // PluginMessageHandler methods
+    if (typeof PluginMessageHandler !== 'undefined') {
+      const methods = [];
+      for (const k in PluginMessageHandler) methods.push(k);
+      // also check prototype
+      try {
+        const proto = Object.getPrototypeOf(PluginMessageHandler);
+        if (proto) for (const k of Object.getOwnPropertyNames(proto)) methods.push(k);
+      } catch(e) {}
+      lines.push('PMH keys: ' + (methods.length ? methods.join(', ') : 'postMessage only?'));
+    } else {
+      lines.push('PMH: NOT FOUND');
+    }
+
+    // creationStorage
+    lines.push('cStorage: ' + (typeof creationStorage !== 'undefined' ? 'YES' : 'NO'));
+
+    // creationSensors
+    if (typeof window.creationSensors !== 'undefined') {
+      const sKeys = Object.keys(window.creationSensors);
+      lines.push('sensors: ' + (sKeys.length ? sKeys.join(', ') : 'empty obj'));
+    } else {
+      lines.push('sensors: NO');
+    }
+
+    // Speech APIs
+    lines.push('SpeechRec: ' + (window.SpeechRecognition ? 'YES' : window.webkitSpeechRecognition ? 'webkit' : 'NO'));
+    lines.push('MediaDevices: ' + (navigator.mediaDevices ? 'YES' : 'NO'));
+    lines.push('MediaRec: ' + (typeof MediaRecorder !== 'undefined' ? 'YES' : 'NO'));
+
+    // Canvas/screen info
+    lines.push('screen: ' + screen.width + 'x' + screen.height + ' dpr=' + devicePixelRatio);
+    lines.push('canvas: ' + W + 'x' + H);
+
+    // onPluginMessage status
+    lines.push('onPM set: ' + (typeof window.onPluginMessage === 'function' ? 'YES' : 'NO'));
+
+    // Last STT/LLM results if any
+    const ls = window.__lepusState || {};
+    if (ls.lastTranscript) lines.push('lastSTT: ' + ls.lastTranscript.slice(0, 50));
+    if (ls.lastReply) lines.push('lastLLM: ' + ls.lastReply.slice(0, 50));
+
+    return lines;
+  }
+
+  function drawDiag() {
+    if (!diagVisible) return;
+    if (!diagLines) diagLines = probeDiag();
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.font = '9px monospace';
+    ctx.fillStyle = '#00ff88';
+    ctx.textAlign = 'left';
+    for (let i = 0; i < diagLines.length; i++) {
+      ctx.fillText(diagLines[i], 4, 14 + i * 12);
+    }
+    ctx.fillStyle = '#666';
+    ctx.fillText('sideClick to close', 4, H - 4);
+    ctx.restore();
+  }
+
+  window.addEventListener('sideClick', () => {
+    diagVisible = !diagVisible;
+    if (diagVisible) diagLines = probeDiag(); // refresh on open
+  });
   function drawHUD() {
     ctx.save();
     ctx.font = '11px monospace';
@@ -649,6 +733,7 @@ window.FACE_EASINGS = {
     drawBrow(-1); drawBrow(1);
     drawMouth();
     drawHUD();
+    drawDiag();
     requestAnimationFrame(loop);
   }
 
