@@ -456,81 +456,15 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.044';
+  const VERSION = 'v0.045';
 
-  // ── Voice Handler Test ────────────────────────────────────────────────
-  const vhLog = [];          // captured events/responses
-  const VH_MAX_LOG = 40;
-  let vhTestIdx = 0;
-
-  // Register every plausible callback before we send anything
-  const VH_CALLBACKS = [
-    'onVoiceResult','onSpeechResult','onTTSComplete','onSTTResult',
-    'onCreationVoice','onVoiceMessage','onVoiceEvent','onVoiceResponse',
-    'onSpeech','onTTS','onSTT','onVoice','onCreationVoiceResult',
-    'onCreationVoiceMessage','onCreationVoiceEvent'
-  ];
-  VH_CALLBACKS.forEach(name => {
-    window[name] = function() {
-      vhLog.push('CB:' + name + ' args=' + JSON.stringify(Array.from(arguments)).slice(0,120));
-      if (vhLog.length > VH_MAX_LOG) vhLog.shift();
-    };
-  });
-
-  // Also intercept onPluginMessage to see if voice responses come through there
-  const _origOnPluginMessage = window.onPluginMessage;
-  window.onPluginMessage = function(evt) {
-    vhLog.push('onPM:' + JSON.stringify(evt).slice(0,120));
-    if (vhLog.length > VH_MAX_LOG) vhLog.shift();
-    if (_origOnPluginMessage) _origOnPluginMessage.call(this, evt);
-  };
-
-  // Test payloads to try — cycle through with longPress while diag is open
-  const VH_TESTS = [
-    // TTS attempts
-    { label: 'TTS: speak/text', msg: {action:'speak', text:'hello'} },
-    { label: 'TTS: type=tts', msg: {type:'tts', text:'hello'} },
-    { label: 'TTS: command=speak', msg: {command:'speak', text:'hello'} },
-    { label: 'TTS: tts=true', msg: {message:'hello', tts:true} },
-    { label: 'TTS: speak string', msg: 'speak:hello' },
-    { label: 'TTS: useTTS flag', msg: {message:'hello', useTTS:true} },
-    { label: 'TTS: say', msg: {action:'say', text:'hello'} },
-    // STT attempts
-    { label: 'STT: listen', msg: {action:'listen'} },
-    { label: 'STT: type=stt', msg: {type:'stt'} },
-    { label: 'STT: startListening', msg: {action:'startListening'} },
-    { label: 'STT: recognize', msg: {command:'recognize'} },
-    { label: 'STT: record', msg: {action:'record'} },
-    // Generic probes
-    { label: 'ping', msg: {action:'ping'} },
-    { label: 'getCapabilities', msg: {action:'getCapabilities'} },
-    { label: 'help', msg: {action:'help'} },
-    { label: 'status', msg: {action:'status'} },
-  ];
-
-  function runVHTest() {
-    if (typeof CreationVoiceHandler === 'undefined') {
-      vhLog.push('ERR: CreationVoiceHandler missing');
-      return;
-    }
-    const test = VH_TESTS[vhTestIdx % VH_TESTS.length];
-    const payload = typeof test.msg === 'string' ? test.msg : JSON.stringify(test.msg);
-    vhLog.push('SEND[' + vhTestIdx + ']: ' + test.label);
-    vhLog.push('  > ' + payload.slice(0,80));
-    if (vhLog.length > VH_MAX_LOG) vhLog.shift();
-    try {
-      CreationVoiceHandler.postMessage(payload);
-      vhLog.push('  OK (no throw)');
-    } catch(e) {
-      vhLog.push('  ERR: ' + e.message.slice(0,80));
-    }
-    vhTestIdx++;
+  // ── Pipeline error log (shown in diag) ────────────────────────────────
+  const pipeLog = [];
+  const PIPE_MAX_LOG = 20;
+  function pipeLogPush(msg) {
+    pipeLog.push(new Date().toLocaleTimeString().slice(0,8) + ' ' + msg);
+    if (pipeLog.length > PIPE_MAX_LOG) pipeLog.shift();
   }
-
-  // longPress while diag is open = run next voice test
-  window.addEventListener('longPressStart', () => {
-    if (diagVisible) { runVHTest(); return; }
-  });
 
   // ── Diagnostic probe (sideClick toggles overlay) ─────────────────────
   let diagVisible = false;
@@ -664,24 +598,6 @@ window.FACE_EASINGS = {
       });
     }
 
-    // Deep dive: CreationVoiceHandler
-    if (typeof window.CreationVoiceHandler !== 'undefined') {
-      lines.push('--- VoiceHandler DEEP ---');
-      // Try postMessage with various probe payloads and log what happens
-      // First just document its shape
-      const vh = window.CreationVoiceHandler;
-      try {
-        lines.push('  str: ' + String(vh.postMessage));
-      } catch(e) {
-        lines.push('  str ERR: ' + e.message);
-      }
-      // Check for common voice-related window callbacks
-      ['onVoiceResult','onSpeechResult','onTTSComplete','onSTTResult',
-       'onCreationVoice','onVoiceMessage','onVoiceEvent'].forEach(cb => {
-        lines.push('  win.' + cb + ': ' + typeof window[cb]);
-      });
-    }
-
     // Deep dive: creationStorage.plain and .secure
     if (typeof creationStorage !== 'undefined') {
       lines.push('--- cStorage shape ---');
@@ -738,13 +654,10 @@ window.FACE_EASINGS = {
     if (ls.lastTranscript) w('lastSTT: ', ls.lastTranscript).forEach(l => lines.push(l));
     if (ls.lastReply) w('lastLLM: ', ls.lastReply).forEach(l => lines.push(l));
 
-    // Voice Handler test log
-    lines.push('--- VH TEST LOG ---');
-    lines.push('PTT=next test (' + vhTestIdx + '/' + VH_TESTS.length + ')');
-    if (vhLog.length === 0) {
-      lines.push('  (no events yet)');
-    } else {
-      vhLog.forEach(l => w('', l).forEach(wl => lines.push(wl)));
+    // Pipeline log
+    if (pipeLog.length) {
+      lines.push('--- PIPELINE LOG ---');
+      pipeLog.forEach(l => w('', l).forEach(wl => lines.push(wl)));
     }
 
     return lines;
@@ -752,8 +665,9 @@ window.FACE_EASINGS = {
 
   function drawDiag() {
     if (!diagVisible) return;
-    // Re-probe every frame so VH log updates live
-    diagLines = probeDiag();
+    // Re-probe periodically for pipeline log updates
+    if (!diagLines) diagLines = probeDiag();
+    if (pipeLog.length) diagLines = probeDiag();
 
     const startIdx = diagPage * DIAG_LINES_PER_PAGE;
     const pageLines = diagLines.slice(startIdx, startIdx + DIAG_LINES_PER_PAGE);
@@ -878,9 +792,11 @@ window.FACE_EASINGS = {
       const fullMessage = `${LEPUS_PROMPT}\n${emotionCtx}\n\nUser: ${transcript}`;
 
       voiceStep = 'llm';
+      pipeLogPush('llm: sending...');
 
       window.__lepusState.llmTimeout = setTimeout(() => {
         if (voiceState === 'processing') {
+          pipeLogPush('llm: TIMEOUT (20s)');
           voiceState = 'idle';
           voiceStep  = '';
           window.__faceDebug.setEmotion('neutral');
@@ -895,83 +811,165 @@ window.FACE_EASINGS = {
     }
 
     window.onPluginMessage = function(evt) {
+      pipeLogPush('onPM fired! state=' + voiceState);
       if (voiceState !== 'processing') return;
       clearTimeout(window.__lepusState.llmTimeout);
       let reply = '';
       try {
         const parsed = JSON.parse(evt.data);
         reply = (parsed.response || parsed.message || '').trim();
+        pipeLogPush('llm parsed OK, len=' + reply.length);
       } catch (e) {
         reply = (evt.message || (typeof evt.data === 'string' ? evt.data : '') || '').trim();
+        pipeLogPush('llm parse fallback, len=' + reply.length);
       }
       voiceStep = '';
-      if (!reply) { voiceState = 'idle'; window.__faceDebug.setEmotion('neutral'); return; }
+      if (!reply) {
+        pipeLogPush('llm: empty reply');
+        voiceState = 'idle'; window.__faceDebug.setEmotion('neutral'); return;
+      }
       window.__lepusState.lastReply = reply;
       voiceState = 'speaking';
       window.__faceDebug.setEmotion('neutral');
+      pipeLogPush('speaking: "' + reply.slice(0,30) + '"');
       speakText(reply);
     };
 
-    // ── STT: Web Speech API (primary) or MediaRecorder+Whisper (fallback) ─
+    // ── STT: MediaRecorder + Whisper ──────────────────────────────────────
     {
-      // ── MediaRecorder + Whisper STT ────────────────────────────────────
-      fetch('https://masatrad-whisper.hf.space/', { method: 'GET', mode: 'no-cors' }).catch(() => {});
+      // Whisper endpoints — try in order, fall back on failure
+      const WHISPER_ENDPOINTS = [
+        'https://masatrad-whisper.hf.space/asr?output=txt&language=en',
+        'https://sanchit-gandhi-whisper-large-v2.hf.space/asr?output=txt&language=en',
+      ];
+      let activeEndpoint = 0;
+
+      // Warmup: wake HuggingFace spaces (they sleep after 5 min idle)
+      function warmupWhisper() {
+        WHISPER_ENDPOINTS.forEach(ep => {
+          const base = ep.split('/asr')[0] + '/';
+          fetch(base, { method: 'GET', mode: 'no-cors' }).catch(() => {});
+        });
+      }
+      warmupWhisper();
+      // Re-warm every 4 minutes to prevent sleep
+      setInterval(warmupWhisper, 240000);
+
+      // Pick best MIME type for this WebView
+      const MIME_CANDIDATES = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/mp4',
+      ];
+      let recorderMime = '';
+      for (const m of MIME_CANDIDATES) {
+        if (MediaRecorder.isTypeSupported(m)) { recorderMime = m; break; }
+      }
+      if (!recorderMime) recorderMime = ''; // let browser pick default
+      pipeLogPush('mime: ' + (recorderMime || 'default'));
 
       let mediaStream = null, recorder = null, audioChunks = [], recordTimer = null;
       const MAX_RECORD_MS = 30000;
 
       window.addEventListener('longPressStart', () => {
-        if (diagVisible) return;  // diag mode uses PTT for voice tests
+        if (diagVisible) return;
         if (voiceState !== 'idle') return;
         voiceState = 'listening';
         window.__faceDebug.setEmotion('attentive');
+        pipeLogPush('mic: requesting...');
         navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
           mediaStream = stream;
           audioChunks = [];
-          recorder    = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+          const opts = recorderMime ? { mimeType: recorderMime } : {};
+          try {
+            recorder = new MediaRecorder(stream, opts);
+          } catch(e) {
+            pipeLogPush('MR fallback: ' + e.message);
+            recorder = new MediaRecorder(stream);
+          }
+          pipeLogPush('rec mime: ' + (recorder.mimeType || '?'));
           recorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
           recorder.onstop = async () => {
-            const blob       = new Blob(audioChunks, { type: 'audio/webm' });
+            const mimeUsed = recorder.mimeType || 'audio/webm';
+            const blob = new Blob(audioChunks, { type: mimeUsed });
+            pipeLogPush('blob: ' + blob.size + 'b ' + mimeUsed);
+            if (blob.size < 1000) {
+              pipeLogPush('WARN: blob too small, skipping STT');
+              voiceState = 'idle'; voiceStep = '';
+              window.__faceDebug.setEmotion('neutral');
+              return;
+            }
             const transcript = await transcribeAudio(blob);
             window.__lepusState.lastTranscript = transcript;
-            if (!transcript) { voiceState = 'idle'; voiceStep = ''; window.__faceDebug.setEmotion('neutral'); return; }
+            pipeLogPush('stt: "' + (transcript || '(empty)').slice(0,40) + '"');
+            if (!transcript) {
+              voiceState = 'idle'; voiceStep = '';
+              window.__faceDebug.setEmotion('neutral');
+              return;
+            }
             sendToLLM(transcript);
           };
           recorder.start();
-          recordTimer = setTimeout(() => stopWhisperListening(), MAX_RECORD_MS);
+          pipeLogPush('recording...');
+          recordTimer = setTimeout(() => stopListening(), MAX_RECORD_MS);
         }).catch(e => {
-          console.error('Mic error:', e);
+          pipeLogPush('MIC ERR: ' + e.message);
           voiceState = 'idle'; window.__faceDebug.setEmotion('neutral');
         });
       });
 
-      function stopWhisperListening() {
+      function stopListening() {
         if (voiceState !== 'listening') return;
         clearTimeout(recordTimer);
         if (recorder && recorder.state !== 'inactive') recorder.stop();
         if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
         voiceState = 'processing'; voiceStep = 'stt';
         window.__faceDebug.setEmotion('thinking');
+        pipeLogPush('stopped, processing...');
       }
 
-      window.addEventListener('longPressEnd', stopWhisperListening);
+      window.addEventListener('longPressEnd', stopListening);
 
       async function transcribeAudio(blob) {
-        // Promise.race is more reliable than AbortController on some WebViews —
-        // the fetch may be orphaned but the function always returns within 20s.
-        const dead = new Promise(resolve => setTimeout(() => resolve(''), 20000));
-        try {
-          const fd = new FormData();
-          fd.append('audio_file', blob, 'audio.webm');
-          const fetchP = fetch(
-            'https://masatrad-whisper.hf.space/asr?output=txt&language=en',
-            { method: 'POST', body: fd }
-          ).then(r => r.text());
-          return ((await Promise.race([fetchP, dead])) || '').trim();
-        } catch (e) {
-          console.error('STT error:', e);
-          return '';
+        const TIMEOUT_MS = 25000;
+
+        for (let i = 0; i < WHISPER_ENDPOINTS.length; i++) {
+          const epIdx = (activeEndpoint + i) % WHISPER_ENDPOINTS.length;
+          const url = WHISPER_ENDPOINTS[epIdx];
+          const dead = new Promise(resolve => setTimeout(() => resolve(null), TIMEOUT_MS));
+
+          try {
+            const fd = new FormData();
+            // Use .webm extension for webm blobs, .ogg for ogg, etc.
+            const ext = blob.type.includes('ogg') ? 'audio.ogg' : blob.type.includes('mp4') ? 'audio.mp4' : 'audio.webm';
+            fd.append('audio_file', blob, ext);
+
+            pipeLogPush('whisper[' + epIdx + ']...');
+            const fetchP = fetch(url, { method: 'POST', body: fd })
+              .then(r => {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.text();
+              });
+
+            const result = await Promise.race([fetchP, dead]);
+            if (result === null) {
+              pipeLogPush('whisper[' + epIdx + '] timeout');
+              continue; // try next endpoint
+            }
+            const text = (result || '').trim();
+            if (text) {
+              activeEndpoint = epIdx; // remember working endpoint
+              return text;
+            }
+            pipeLogPush('whisper[' + epIdx + '] empty response');
+          } catch (e) {
+            pipeLogPush('whisper[' + epIdx + '] ERR: ' + e.message.slice(0,40));
+            continue; // try next endpoint
+          }
         }
+        pipeLogPush('ALL whisper endpoints failed');
+        return '';
       }
     }
   }
