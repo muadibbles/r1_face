@@ -208,3 +208,26 @@ Does `wantsR1Response: true` in `PluginMessageHandler.postMessage` cause the LLM
 8. **Conversation memory** — pass prior turns in LLM prompt
 9. **System prompt designer control** — editable LEPUS_PROMPT in designer
 10. **creationStorage** — persist conversation history across sessions
+
+---
+
+## 9. Session Log — 2026-04-02 (Mac, hotel WiFi)
+
+### Context
+Cloned repo to Mac (`/Users/sfillat/projects/r1_face`). R1 device connected via USB. Code was at v0.047 on remote (commits v0.043–v0.047 happened between the v0.041 HANDOVER above and this session — those added a diagnostic probe, R1 Creations Hacker Guide, and Whisper STT fixes).
+
+### What we did
+1. **Attempted USB debugging** — R1 has no accessible developer mode. Tried tapping r1OS version, model, IMEI 7 times — none triggered dev mode. `adb devices` and `fastboot devices` both empty. USB debugging appears locked down on R1.
+2. **Removed Web Speech API path (v0.042 commit, rebased on v0.047)** — Web Speech API exists in the R1 WebView but `recognition.onend` never fires (AOSP has no Google speech backend). This left `voiceState` stuck in `'processing'` permanently, blocking all subsequent PTT presses. Deleted the entire Web Speech code path; STT now always uses MediaRecorder + HuggingFace Whisper.
+3. **Pushed, regenerated QR, installed on R1.**
+4. **New bug: `processing:stt` hangs forever** — Whisper endpoint (`masatrad-whisper.hf.space`) unreachable or extremely slow on hotel WiFi. The `Promise.race` 20s timeout doesn't appear to work in the R1 WebView either, so the state never resets to idle and PTT becomes permanently unresponsive.
+
+### New pitfalls discovered
+- **R1 has no accessible developer mode** — tapping build number / version / IMEI 7 times does nothing. ADB/fastboot not available without it.
+- **Promise.race timeout unreliable on R1 WebView** — may not cancel/resolve properly. Need hard `setTimeout` reset as backup.
+- **Hotel/restricted WiFi** — may block HuggingFace endpoints entirely. External STT is fragile dependency.
+
+### Unresolved
+- STT needs a hard `setTimeout` safety reset (like the old Web Speech 8s timer) so PTT never gets permanently stuck
+- Need a more reliable STT approach — either a paid endpoint, R1-native capability, or skip STT entirely for testing the LLM pipeline
+- `PluginMessageHandler` LLM callback still unconfirmed — STT has never successfully produced a transcript on-device
