@@ -462,59 +462,84 @@ window.FACE_EASINGS = {
   let diagVisible = false;
   let diagLines   = null;
 
-  function probeDiag() {
+  // wrap text to fit canvas width at given font size
+  function wrapLine(prefix, text, charsPerLine) {
     const lines = [];
-    lines.push('-- R1 PROBE --');
-    lines.push('UA: ' + (navigator.userAgent || '?').slice(0, 60));
-    lines.push('UA2: ' + (navigator.userAgent || '').slice(60, 120));
+    const full = prefix + text;
+    for (let i = 0; i < full.length; i += charsPerLine) {
+      lines.push(full.slice(i, i + charsPerLine));
+    }
+    return lines;
+  }
 
-    // R1-specific globals
+  let diagPage = 0;
+  const DIAG_LINES_PER_PAGE = 22;
+
+  function probeDiag() {
+    const CW = 32; // chars per line at 7px font on 240px canvas
+    const lines = [];
+    const w = (pfx, val) => wrapLine(pfx, val, CW);
+
+    lines.push('-- R1 PROBE (scroll to page) --');
+
+    // Full user agent
+    w('UA: ', navigator.userAgent || '?').forEach(l => lines.push(l));
+
+    // R1-specific globals — one per line
     const r1Keys = Object.keys(window).filter(k =>
       /plugin|creation|rabbit|handler|sensor/i.test(k)
     );
-    lines.push('R1 globals: ' + (r1Keys.length ? r1Keys.join(', ') : 'NONE'));
+    lines.push('--- R1 GLOBALS (' + r1Keys.length + ') ---');
+    r1Keys.forEach(k => lines.push('  ' + k));
 
     // PluginMessageHandler methods
     if (typeof PluginMessageHandler !== 'undefined') {
       const methods = [];
       for (const k in PluginMessageHandler) methods.push(k);
-      // also check prototype
       try {
         const proto = Object.getPrototypeOf(PluginMessageHandler);
         if (proto) for (const k of Object.getOwnPropertyNames(proto)) methods.push(k);
       } catch(e) {}
-      lines.push('PMH keys: ' + (methods.length ? methods.join(', ') : 'postMessage only?'));
+      lines.push('--- PMH KEYS ---');
+      methods.forEach(k => lines.push('  ' + k));
     } else {
       lines.push('PMH: NOT FOUND');
     }
 
-    // creationStorage
-    lines.push('cStorage: ' + (typeof creationStorage !== 'undefined' ? 'YES' : 'NO'));
+    // creationStorage — probe its methods
+    if (typeof creationStorage !== 'undefined') {
+      const csKeys = [];
+      for (const k in creationStorage) csKeys.push(k);
+      try {
+        const proto = Object.getPrototypeOf(creationStorage);
+        if (proto) for (const k of Object.getOwnPropertyNames(proto)) csKeys.push(k);
+      } catch(e) {}
+      lines.push('--- cStorage KEYS ---');
+      csKeys.forEach(k => lines.push('  ' + k));
+    } else {
+      lines.push('cStorage: NO');
+    }
 
     // creationSensors
     if (typeof window.creationSensors !== 'undefined') {
       const sKeys = Object.keys(window.creationSensors);
-      lines.push('sensors: ' + (sKeys.length ? sKeys.join(', ') : 'empty obj'));
+      lines.push('sensors: ' + (sKeys.length ? sKeys.join(', ') : 'empty'));
     } else {
       lines.push('sensors: NO');
     }
 
-    // Speech APIs
-    lines.push('SpeechRec: ' + (window.SpeechRecognition ? 'YES' : window.webkitSpeechRecognition ? 'webkit' : 'NO'));
+    // APIs
+    lines.push('SpeechRec: ' + (window.SpeechRecognition ? 'native' : window.webkitSpeechRecognition ? 'webkit' : 'NO'));
     lines.push('MediaDevices: ' + (navigator.mediaDevices ? 'YES' : 'NO'));
     lines.push('MediaRec: ' + (typeof MediaRecorder !== 'undefined' ? 'YES' : 'NO'));
-
-    // Canvas/screen info
     lines.push('screen: ' + screen.width + 'x' + screen.height + ' dpr=' + devicePixelRatio);
     lines.push('canvas: ' + W + 'x' + H);
-
-    // onPluginMessage status
     lines.push('onPM set: ' + (typeof window.onPluginMessage === 'function' ? 'YES' : 'NO'));
 
-    // Last STT/LLM results if any
+    // Last STT/LLM
     const ls = window.__lepusState || {};
-    if (ls.lastTranscript) lines.push('lastSTT: ' + ls.lastTranscript.slice(0, 50));
-    if (ls.lastReply) lines.push('lastLLM: ' + ls.lastReply.slice(0, 50));
+    if (ls.lastTranscript) w('lastSTT: ', ls.lastTranscript).forEach(l => lines.push(l));
+    if (ls.lastReply) w('lastLLM: ', ls.lastReply).forEach(l => lines.push(l));
 
     return lines;
   }
@@ -523,23 +548,42 @@ window.FACE_EASINGS = {
     if (!diagVisible) return;
     if (!diagLines) diagLines = probeDiag();
 
+    const startIdx = diagPage * DIAG_LINES_PER_PAGE;
+    const pageLines = diagLines.slice(startIdx, startIdx + DIAG_LINES_PER_PAGE);
+    const totalPages = Math.ceil(diagLines.length / DIAG_LINES_PER_PAGE);
+
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillStyle = 'rgba(0,0,0,0.92)';
     ctx.fillRect(0, 0, W, H);
-    ctx.font = '9px monospace';
+    ctx.font = '7px monospace';
     ctx.fillStyle = '#00ff88';
     ctx.textAlign = 'left';
-    for (let i = 0; i < diagLines.length; i++) {
-      ctx.fillText(diagLines[i], 4, 14 + i * 12);
+    for (let i = 0; i < pageLines.length; i++) {
+      ctx.fillText(pageLines[i], 3, 10 + i * 12);
     }
     ctx.fillStyle = '#666';
-    ctx.fillText('sideClick to close', 4, H - 4);
+    ctx.font = '7px monospace';
+    ctx.fillText('pg ' + (diagPage + 1) + '/' + totalPages + '  scroll=page  side=close', 3, H - 3);
     ctx.restore();
   }
 
   window.addEventListener('sideClick', () => {
     diagVisible = !diagVisible;
-    if (diagVisible) diagLines = probeDiag(); // refresh on open
+    diagPage = 0;
+    if (diagVisible) diagLines = probeDiag();
+  });
+
+  // hijack scroll for paging when diag is open
+  const _origScrollUp = window.addEventListener;
+  window.addEventListener('scrollUp', (e) => {
+    if (!diagVisible) return;
+    const totalPages = Math.ceil((diagLines || []).length / DIAG_LINES_PER_PAGE);
+    if (diagPage > 0) diagPage--;
+  });
+  window.addEventListener('scrollDown', (e) => {
+    if (!diagVisible) return;
+    const totalPages = Math.ceil((diagLines || []).length / DIAG_LINES_PER_PAGE);
+    if (diagPage < totalPages - 1) diagPage++;
   });
   function drawHUD() {
     ctx.save();
@@ -599,11 +643,13 @@ window.FACE_EASINGS = {
 
   // ── Scroll wheel — cycle emotions ────────────────────────────────────
   window.addEventListener('scrollUp', () => {
+    if (diagVisible) return;
     const names = window.FACE_EMOTION_NAMES;
     const next  = (names.indexOf(emo.name) + 1) % names.length;
     window.__faceDebug.setEmotion(names[next]);
   });
   window.addEventListener('scrollDown', () => {
+    if (diagVisible) return;
     const names = window.FACE_EMOTION_NAMES;
     const prev  = (names.indexOf(emo.name) - 1 + names.length) % names.length;
     window.__faceDebug.setEmotion(names[prev]);
