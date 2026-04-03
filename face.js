@@ -456,7 +456,81 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.043';
+  const VERSION = 'v0.044';
+
+  // ── Voice Handler Test ────────────────────────────────────────────────
+  const vhLog = [];          // captured events/responses
+  const VH_MAX_LOG = 40;
+  let vhTestIdx = 0;
+
+  // Register every plausible callback before we send anything
+  const VH_CALLBACKS = [
+    'onVoiceResult','onSpeechResult','onTTSComplete','onSTTResult',
+    'onCreationVoice','onVoiceMessage','onVoiceEvent','onVoiceResponse',
+    'onSpeech','onTTS','onSTT','onVoice','onCreationVoiceResult',
+    'onCreationVoiceMessage','onCreationVoiceEvent'
+  ];
+  VH_CALLBACKS.forEach(name => {
+    window[name] = function() {
+      vhLog.push('CB:' + name + ' args=' + JSON.stringify(Array.from(arguments)).slice(0,120));
+      if (vhLog.length > VH_MAX_LOG) vhLog.shift();
+    };
+  });
+
+  // Also intercept onPluginMessage to see if voice responses come through there
+  const _origOnPluginMessage = window.onPluginMessage;
+  window.onPluginMessage = function(evt) {
+    vhLog.push('onPM:' + JSON.stringify(evt).slice(0,120));
+    if (vhLog.length > VH_MAX_LOG) vhLog.shift();
+    if (_origOnPluginMessage) _origOnPluginMessage.call(this, evt);
+  };
+
+  // Test payloads to try — cycle through with longPress while diag is open
+  const VH_TESTS = [
+    // TTS attempts
+    { label: 'TTS: speak/text', msg: {action:'speak', text:'hello'} },
+    { label: 'TTS: type=tts', msg: {type:'tts', text:'hello'} },
+    { label: 'TTS: command=speak', msg: {command:'speak', text:'hello'} },
+    { label: 'TTS: tts=true', msg: {message:'hello', tts:true} },
+    { label: 'TTS: speak string', msg: 'speak:hello' },
+    { label: 'TTS: useTTS flag', msg: {message:'hello', useTTS:true} },
+    { label: 'TTS: say', msg: {action:'say', text:'hello'} },
+    // STT attempts
+    { label: 'STT: listen', msg: {action:'listen'} },
+    { label: 'STT: type=stt', msg: {type:'stt'} },
+    { label: 'STT: startListening', msg: {action:'startListening'} },
+    { label: 'STT: recognize', msg: {command:'recognize'} },
+    { label: 'STT: record', msg: {action:'record'} },
+    // Generic probes
+    { label: 'ping', msg: {action:'ping'} },
+    { label: 'getCapabilities', msg: {action:'getCapabilities'} },
+    { label: 'help', msg: {action:'help'} },
+    { label: 'status', msg: {action:'status'} },
+  ];
+
+  function runVHTest() {
+    if (typeof CreationVoiceHandler === 'undefined') {
+      vhLog.push('ERR: CreationVoiceHandler missing');
+      return;
+    }
+    const test = VH_TESTS[vhTestIdx % VH_TESTS.length];
+    const payload = typeof test.msg === 'string' ? test.msg : JSON.stringify(test.msg);
+    vhLog.push('SEND[' + vhTestIdx + ']: ' + test.label);
+    vhLog.push('  > ' + payload.slice(0,80));
+    if (vhLog.length > VH_MAX_LOG) vhLog.shift();
+    try {
+      CreationVoiceHandler.postMessage(payload);
+      vhLog.push('  OK (no throw)');
+    } catch(e) {
+      vhLog.push('  ERR: ' + e.message.slice(0,80));
+    }
+    vhTestIdx++;
+  }
+
+  // longPress while diag is open = run next voice test
+  window.addEventListener('longPressStart', () => {
+    if (diagVisible) { runVHTest(); return; }
+  });
 
   // ── Diagnostic probe (sideClick toggles overlay) ─────────────────────
   let diagVisible = false;
@@ -664,12 +738,22 @@ window.FACE_EASINGS = {
     if (ls.lastTranscript) w('lastSTT: ', ls.lastTranscript).forEach(l => lines.push(l));
     if (ls.lastReply) w('lastLLM: ', ls.lastReply).forEach(l => lines.push(l));
 
+    // Voice Handler test log
+    lines.push('--- VH TEST LOG ---');
+    lines.push('PTT=next test (' + vhTestIdx + '/' + VH_TESTS.length + ')');
+    if (vhLog.length === 0) {
+      lines.push('  (no events yet)');
+    } else {
+      vhLog.forEach(l => w('', l).forEach(wl => lines.push(wl)));
+    }
+
     return lines;
   }
 
   function drawDiag() {
     if (!diagVisible) return;
-    if (!diagLines) diagLines = probeDiag();
+    // Re-probe every frame so VH log updates live
+    diagLines = probeDiag();
 
     const startIdx = diagPage * DIAG_LINES_PER_PAGE;
     const pageLines = diagLines.slice(startIdx, startIdx + DIAG_LINES_PER_PAGE);
@@ -837,6 +921,7 @@ window.FACE_EASINGS = {
       const MAX_RECORD_MS = 30000;
 
       window.addEventListener('longPressStart', () => {
+        if (diagVisible) return;  // diag mode uses PTT for voice tests
         if (voiceState !== 'idle') return;
         voiceState = 'listening';
         window.__faceDebug.setEmotion('attentive');
