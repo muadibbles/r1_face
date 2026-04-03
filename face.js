@@ -456,7 +456,7 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.045';
+  const VERSION = 'v0.046';
 
   // ── Pipeline error log (shown in diag) ────────────────────────────────
   const pipeLog = [];
@@ -814,6 +814,7 @@ window.FACE_EASINGS = {
       pipeLogPush('onPM fired! state=' + voiceState);
       if (voiceState !== 'processing') return;
       clearTimeout(window.__lepusState.llmTimeout);
+      clearTimeout(processingGuard);
       let reply = '';
       try {
         const parsed = JSON.parse(evt.data);
@@ -919,6 +920,19 @@ window.FACE_EASINGS = {
         });
       });
 
+      // Global safety: if stuck in processing for >30s, force reset
+      let processingGuard = null;
+      function startProcessingGuard() {
+        clearTimeout(processingGuard);
+        processingGuard = setTimeout(() => {
+          if (voiceState === 'processing') {
+            pipeLogPush('SAFETY: 30s guard reset');
+            voiceState = 'idle'; voiceStep = '';
+            window.__faceDebug.setEmotion('neutral');
+          }
+        }, 30000);
+      }
+
       function stopListening() {
         if (voiceState !== 'listening') return;
         clearTimeout(recordTimer);
@@ -927,12 +941,13 @@ window.FACE_EASINGS = {
         voiceState = 'processing'; voiceStep = 'stt';
         window.__faceDebug.setEmotion('thinking');
         pipeLogPush('stopped, processing...');
+        startProcessingGuard();
       }
 
       window.addEventListener('longPressEnd', stopListening);
 
       async function transcribeAudio(blob) {
-        const TIMEOUT_MS = 25000;
+        const TIMEOUT_MS = 12000;  // 12s per endpoint (was 25s — too long)
 
         for (let i = 0; i < WHISPER_ENDPOINTS.length; i++) {
           const epIdx = (activeEndpoint + i) % WHISPER_ENDPOINTS.length;
@@ -941,34 +956,35 @@ window.FACE_EASINGS = {
 
           try {
             const fd = new FormData();
-            // Use .webm extension for webm blobs, .ogg for ogg, etc.
             const ext = blob.type.includes('ogg') ? 'audio.ogg' : blob.type.includes('mp4') ? 'audio.mp4' : 'audio.webm';
             fd.append('audio_file', blob, ext);
 
-            pipeLogPush('whisper[' + epIdx + ']...');
+            pipeLogPush('whisper[' + epIdx + '] POST ' + blob.size + 'b');
             const fetchP = fetch(url, { method: 'POST', body: fd })
               .then(r => {
+                pipeLogPush('whisper[' + epIdx + '] HTTP ' + r.status);
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 return r.text();
               });
 
             const result = await Promise.race([fetchP, dead]);
             if (result === null) {
-              pipeLogPush('whisper[' + epIdx + '] timeout');
-              continue; // try next endpoint
+              pipeLogPush('whisper[' + epIdx + '] TIMEOUT ' + TIMEOUT_MS + 'ms');
+              continue;
             }
             const text = (result || '').trim();
             if (text) {
-              activeEndpoint = epIdx; // remember working endpoint
+              activeEndpoint = epIdx;
+              pipeLogPush('whisper OK: "' + text.slice(0,30) + '"');
               return text;
             }
-            pipeLogPush('whisper[' + epIdx + '] empty response');
+            pipeLogPush('whisper[' + epIdx + '] empty body');
           } catch (e) {
-            pipeLogPush('whisper[' + epIdx + '] ERR: ' + e.message.slice(0,40));
-            continue; // try next endpoint
+            pipeLogPush('whisper[' + epIdx + '] ERR: ' + e.message.slice(0,50));
+            continue;
           }
         }
-        pipeLogPush('ALL whisper endpoints failed');
+        pipeLogPush('ALL whisper failed');
         return '';
       }
     }
