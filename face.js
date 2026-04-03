@@ -456,7 +456,7 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.048';
+  const VERSION = 'v0.049';
 
   // ── Pipeline error log (shown in diag) ────────────────────────────────
   const pipeLog = [];
@@ -870,9 +870,10 @@ window.FACE_EASINGS = {
       if (!recorderMime) recorderMime = ''; // let browser pick default
       pipeLogPush('mime: ' + (recorderMime || 'default'));
 
-      // ── Pre-acquire mic on load (eliminates 10s+ getUserMedia delay on PTT) ──
+      // ── Mic acquisition: first PTT acquires, then kept alive ──────────
       let micStream = null;
       let micReady  = false;
+      let micAcquiring = false;
       let recorder = null, audioChunks = [], recordTimer = null;
       const MAX_RECORD_MS = 30000;
 
@@ -890,20 +891,25 @@ window.FACE_EASINGS = {
       }
 
       function acquireMic() {
-        pipeLogPush('mic: acquiring...');
+        if (micAcquiring) return;
+        micAcquiring = true;
+        pipeLogPush('mic: acquiring (user gesture)...');
+        voiceState = 'listening';
+        window.__faceDebug.setEmotion('attentive');
         navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
           micStream = stream;
           micReady = true;
+          micAcquiring = false;
           pipeLogPush('mic: READY');
+          // Mic is now ready — start recording immediately for this PTT press
+          startRecording();
         }).catch(e => {
-          pipeLogPush('mic acquire ERR: ' + e.message);
-          // Retry in 5s
-          setTimeout(acquireMic, 5000);
+          micAcquiring = false;
+          pipeLogPush('mic ERR: ' + e.message);
+          voiceState = 'idle';
+          window.__faceDebug.setEmotion('neutral');
         });
       }
-
-      // Start acquiring mic immediately
-      acquireMic();
 
       function createRecorder() {
         if (!micStream) return null;
@@ -918,31 +924,11 @@ window.FACE_EASINGS = {
         return rec;
       }
 
-      window.addEventListener('longPressStart', () => {
-        if (diagVisible) return;
-        if (voiceState !== 'idle') return;
-
-        if (!micReady || !micStream) {
-          pipeLogPush('PTT: mic not ready yet');
-          return;
-        }
-
-        // Check mic stream is still alive (tracks can end unexpectedly)
-        const track = micStream.getAudioTracks()[0];
-        if (!track || track.readyState === 'ended') {
-          pipeLogPush('PTT: mic track dead, re-acquiring');
-          micReady = false;
-          acquireMic();
-          return;
-        }
-
-        voiceState = 'listening';
-        window.__faceDebug.setEmotion('attentive');
+      function startRecording() {
         audioChunks = [];
-
         recorder = createRecorder();
         if (!recorder) {
-          pipeLogPush('PTT: recorder creation failed');
+          pipeLogPush('recorder creation failed');
           voiceState = 'idle';
           window.__faceDebug.setEmotion('neutral');
           return;
@@ -984,6 +970,31 @@ window.FACE_EASINGS = {
         recorder.start(500);
         pipeLogPush('recording...');
         recordTimer = setTimeout(() => finishRecording(), MAX_RECORD_MS);
+      }
+
+      window.addEventListener('longPressStart', () => {
+        if (diagVisible) return;
+        if (voiceState !== 'idle') return;
+
+        // First press: acquire mic (needs user gesture on Chrome 101)
+        if (!micReady || !micStream) {
+          acquireMic();  // will call startRecording() when ready
+          return;
+        }
+
+        // Check mic stream is still alive
+        const track = micStream.getAudioTracks()[0];
+        if (!track || track.readyState === 'ended') {
+          pipeLogPush('PTT: mic track dead, re-acquiring');
+          micReady = false;
+          acquireMic();  // will start recording when ready
+          return;
+        }
+
+        // Mic ready — start recording immediately
+        voiceState = 'listening';
+        window.__faceDebug.setEmotion('attentive');
+        startRecording();
       });
 
       function finishRecording() {
