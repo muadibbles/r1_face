@@ -520,15 +520,77 @@ window.FACE_EASINGS = {
       lines.push('cStorage: NO');
     }
 
+    // Deep probe helper: enumerate own + proto keys with types
+    function probeObj(name, obj) {
+      lines.push('--- ' + name + ' ---');
+      if (typeof obj === 'undefined') { lines.push('  NOT FOUND'); return; }
+      lines.push('  typeof: ' + typeof obj);
+      // own keys
+      const own = Object.keys(obj);
+      if (own.length) {
+        lines.push('  own keys:');
+        own.forEach(k => {
+          let t = '?';
+          try { t = typeof obj[k]; } catch(e) { t = 'ERR'; }
+          let v = '';
+          if (t === 'string') v = ' = "' + String(obj[k]).slice(0, 20) + '"';
+          else if (t === 'number' || t === 'boolean') v = ' = ' + obj[k];
+          lines.push('    ' + k + ' (' + t + ')' + v);
+        });
+      }
+      // proto keys (skip Object.prototype builtins)
+      const builtins = new Set(['constructor','__defineGetter__','__defineSetter__',
+        'hasOwnProperty','__lookupGetter__','__lookupSetter__','isPrototypeOf',
+        'propertyIsEnumerable','toString','valueOf','__proto__','toLocaleString']);
+      try {
+        const proto = Object.getPrototypeOf(obj);
+        if (proto && proto !== Object.prototype) {
+          const pKeys = Object.getOwnPropertyNames(proto).filter(k => !builtins.has(k));
+          if (pKeys.length) {
+            lines.push('  proto keys:');
+            pKeys.forEach(k => {
+              let t = '?';
+              try { t = typeof proto[k]; } catch(e) { t = 'ERR'; }
+              lines.push('    ' + k + ' (' + t + ')');
+            });
+          }
+        }
+      } catch(e) {}
+      // try to get string representation
+      try {
+        const s = String(obj);
+        if (s !== '[object Object]') w('  str: ', s).forEach(l => lines.push(l));
+      } catch(e) {}
+    }
+
+    // Deep probes
+    probeObj('FlutterButtonHandler', window.FlutterButtonHandler);
+    probeObj('touchEventHandler', window.touchEventHandler);
+    probeObj('AccelerometerHandler', window.AccelerometerHandler);
+    probeObj('CreationStorageHandler', window.CreationStorageHandler);
+    probeObj('CreationMutexHandler', window.CreationMutexHandler);
+
     // creationSensors
-    if (typeof window.creationSensors !== 'undefined') {
-      const sKeys = Object.keys(window.creationSensors);
-      lines.push('sensors: ' + (sKeys.length ? sKeys.join(', ') : 'empty'));
-    } else {
-      lines.push('sensors: NO');
+    probeObj('creationSensors', window.creationSensors);
+
+    // creationStorage own methods (not proto builtins)
+    if (typeof creationStorage !== 'undefined') {
+      lines.push('--- cStorage methods ---');
+      const own = Object.keys(creationStorage);
+      own.forEach(k => {
+        let t = '?'; try { t = typeof creationStorage[k]; } catch(e) {}
+        lines.push('  ' + k + ' (' + t + ')');
+      });
+      // try calling getItem/setItem/keys to see if they exist
+      ['getItem','setItem','removeItem','clear','keys','length','plan'].forEach(m => {
+        let exists = '?';
+        try { exists = typeof creationStorage[m]; } catch(e) { exists = 'ERR'; }
+        lines.push('  .' + m + ' = ' + exists);
+      });
     }
 
     // APIs
+    lines.push('--- APIS ---');
     lines.push('SpeechRec: ' + (window.SpeechRecognition ? 'native' : window.webkitSpeechRecognition ? 'webkit' : 'NO'));
     lines.push('MediaDevices: ' + (navigator.mediaDevices ? 'YES' : 'NO'));
     lines.push('MediaRec: ' + (typeof MediaRecorder !== 'undefined' ? 'YES' : 'NO'));
