@@ -660,53 +660,34 @@ window.FACE_EASINGS = {
       }));
     }
 
+    // Generic speaking animation when we don't have reply text
+    // Generates random open/close mouth movements for ~duration ms
+    function speakGeneric(duration) {
+      mouth.queue = [];
+      mouth.holdTimer = 0;
+      const msPerWord = 430;
+      const wordCount = Math.round(duration / msPerWord);
+      for (let i = 0; i < wordCount; i++) {
+        const openAmt = 0.3 + Math.random() * 0.5;
+        mouth.queue.push({ target: openAmt, hold: msPerWord * 0.55 });
+        mouth.queue.push({ target: 0.05,    hold: msPerWord * 0.45 });
+      }
+      mouth.queue.push({ target: 0, hold: 300 });
+    }
+
     window.onPluginMessage = function(evt) {
       pipeLogPush('onPM! st=' + voiceState);
-      // Dump all keys and values for debugging
-      try {
-        var keys = Object.keys(evt);
-        for (var i = 0; i < keys.length; i++) {
-          var k = keys[i];
-          var v = String(evt[k]).slice(0, 40);
-          pipeLogPush('  ' + k + '=' + v);
-        }
-      } catch(e2) {}
       if (voiceState !== 'processing') return;
       clearTimeout(window.__lepusState.llmTimeout);
       clearTimeout(processingGuard);
-      // Try every possible field for the reply
-      let reply = '';
-      try {
-        // Try evt.message first (could be echo), then evt.data parsed
-        var candidates = [evt.response, evt.text, evt.reply, evt.result, evt.answer];
-        if (evt.data) {
-          try {
-            var parsed = typeof evt.data === 'string' ? JSON.parse(evt.data) : evt.data;
-            candidates.push(parsed.response, parsed.message, parsed.text, parsed.reply);
-          } catch(e3) {}
-        }
-        // evt.message last — might be our echo
-        candidates.push(evt.message);
-        for (var j = 0; j < candidates.length; j++) {
-          if (typeof candidates[j] === 'string' && candidates[j].trim().length > 0) {
-            reply = candidates[j].trim();
-            break;
-          }
-        }
-        pipeLogPush('reply len=' + reply.length);
-      } catch (e) {
-        pipeLogPush('parse err: ' + e.message);
-      }
       voiceStep = '';
-      if (!reply) {
-        pipeLogPush('llm: empty reply');
-        voiceState = 'idle'; window.__faceDebug.setEmotion('neutral'); return;
-      }
-      window.__lepusState.lastReply = reply;
+      // R1 sends {message: "LLM_Response Available", pluginId: "..."}
+      // The actual reply text is NOT in the callback — R1 speaks it natively.
+      // So we start a generic mouth animation to match the TTS.
+      pipeLogPush('speaking (generic)');
       voiceState = 'speaking';
-      window.__faceDebug.setEmotion('neutral');
-      pipeLogPush('speaking: "' + reply.slice(0,30) + '"');
-      speakText(reply);
+      window.__faceDebug.setEmotion('happy');
+      speakGeneric(8000);  // animate for ~8s (typical R1 response length)
     };
 
     // ── STT: MediaRecorder + Whisper ──────────────────────────────────────
