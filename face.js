@@ -676,22 +676,26 @@ window.FACE_EASINGS = {
     }
 
     window.onPluginMessage = function(evt) {
+      pipeLogPush('onPM! st=' + voiceState);
+      pipeLogPush('fn:speakG=' + typeof speakGeneric + ' guard=' + typeof processingGuard);
+      pipeLogPush('lepus=' + typeof window.__lepusState + ' debug=' + typeof window.__faceDebug);
       try {
-        pipeLogPush('onPM! st=' + voiceState);
-        if (voiceState !== 'processing') return;
+        if (voiceState !== 'processing') { pipeLogPush('SKIP: not processing'); return; }
+        pipeLogPush('A: clearing timeouts');
         clearTimeout(window.__lepusState.llmTimeout);
         clearTimeout(processingGuard);
-        voiceStep = '';
-        pipeLogPush('speaking (generic)');
+        pipeLogPush('B: setting state');
         voiceState = 'speaking';
+        voiceStep = '';
+        pipeLogPush('C: setEmotion');
         window.__faceDebug.setEmotion('happy');
+        pipeLogPush('D: speakGeneric');
         speakGeneric(8000);
+        pipeLogPush('E: done!');
       } catch(e) {
-        pipeLogPush('onPM ERR: ' + e.message);
-        voiceState = 'speaking';
+        pipeLogPush('ERR: ' + e.message + ' @' + e.stack.split('\n')[1].slice(-30));
+        voiceState = 'idle';
         voiceStep = '';
-        window.__faceDebug.setEmotion('happy');
-        speakGeneric(8000);
       }
     };
 
