@@ -433,17 +433,28 @@ window.FACE_EASINGS = {
       ctx.quadraticCurveTo(0, -curve, span, 0);           // upper lip arc
       ctx.quadraticCurveTo(0, openH - curve, -span, 0);   // lower lip arc
       ctx.closePath();
-      ctx.fillStyle = cfg.mouthInteriorColor;
+      ctx.fillStyle = '#1a1020';  // visible dark mouth interior
       ctx.fill();
     }
 
-    // Lip line
+    // Upper lip line
     if (thickness > 0) {
       ctx.beginPath();
       ctx.moveTo(-span, 0);
       ctx.quadraticCurveTo(0, -curve, span, 0);
       ctx.strokeStyle = cfg.mouthColor;
       ctx.lineWidth   = thickness;
+      ctx.lineCap     = 'round';
+      ctx.stroke();
+    }
+
+    // Lower lip line when mouth is open
+    if (openH >= 1 && thickness > 0) {
+      ctx.beginPath();
+      ctx.moveTo(-span, 0);
+      ctx.quadraticCurveTo(0, openH - curve, span, 0);
+      ctx.strokeStyle = cfg.mouthColor;
+      ctx.lineWidth   = thickness * 0.7;
       ctx.lineCap     = 'round';
       ctx.stroke();
     }
@@ -456,7 +467,7 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.059';
+  const VERSION = 'v0.060';
 
   // ── Pipeline error log (shown in diag) ────────────────────────────────
   const pipeLog = [];
