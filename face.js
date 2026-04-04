@@ -456,7 +456,7 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.050';
+  const VERSION = 'v0.051';
 
   // ── Pipeline error log (shown in diag) ────────────────────────────────
   const pipeLog = [];
@@ -484,179 +484,25 @@ window.FACE_EASINGS = {
   const DIAG_LINES_PER_PAGE = 22;
 
   function probeDiag() {
-    const CW = 32; // chars per line at 7px font on 240px canvas
+    const CW = 32;
     const lines = [];
     const w = (pfx, val) => wrapLine(pfx, val, CW);
 
-    lines.push('-- R1 PROBE (scroll to page) --');
-
-    // Full user agent
-    w('UA: ', navigator.userAgent || '?').forEach(l => lines.push(l));
-
-    // R1-specific globals — one per line
-    const r1Keys = Object.keys(window).filter(k =>
-      /plugin|creation|rabbit|handler|sensor/i.test(k)
-    );
-    lines.push('--- R1 GLOBALS (' + r1Keys.length + ') ---');
-    r1Keys.forEach(k => lines.push('  ' + k));
-
-    // PluginMessageHandler methods
-    if (typeof PluginMessageHandler !== 'undefined') {
-      const methods = [];
-      for (const k in PluginMessageHandler) methods.push(k);
-      try {
-        const proto = Object.getPrototypeOf(PluginMessageHandler);
-        if (proto) for (const k of Object.getOwnPropertyNames(proto)) methods.push(k);
-      } catch(e) {}
-      lines.push('--- PMH KEYS ---');
-      methods.forEach(k => lines.push('  ' + k));
-    } else {
-      lines.push('PMH: NOT FOUND');
-    }
-
-    // creationStorage — probe its methods
-    if (typeof creationStorage !== 'undefined') {
-      const csKeys = [];
-      for (const k in creationStorage) csKeys.push(k);
-      try {
-        const proto = Object.getPrototypeOf(creationStorage);
-        if (proto) for (const k of Object.getOwnPropertyNames(proto)) csKeys.push(k);
-      } catch(e) {}
-      lines.push('--- cStorage KEYS ---');
-      csKeys.forEach(k => lines.push('  ' + k));
-    } else {
-      lines.push('cStorage: NO');
-    }
-
-    // Deep probe helper: enumerate own + proto keys with types
-    function probeObj(name, obj) {
-      lines.push('--- ' + name + ' ---');
-      if (typeof obj === 'undefined') { lines.push('  NOT FOUND'); return; }
-      lines.push('  typeof: ' + typeof obj);
-      // own keys
-      const own = Object.keys(obj);
-      if (own.length) {
-        lines.push('  own keys:');
-        own.forEach(k => {
-          let t = '?';
-          try { t = typeof obj[k]; } catch(e) { t = 'ERR'; }
-          let v = '';
-          if (t === 'string') v = ' = "' + String(obj[k]).slice(0, 20) + '"';
-          else if (t === 'number' || t === 'boolean') v = ' = ' + obj[k];
-          lines.push('    ' + k + ' (' + t + ')' + v);
-        });
-      }
-      // proto keys (skip Object.prototype builtins)
-      const builtins = new Set(['constructor','__defineGetter__','__defineSetter__',
-        'hasOwnProperty','__lookupGetter__','__lookupSetter__','isPrototypeOf',
-        'propertyIsEnumerable','toString','valueOf','__proto__','toLocaleString']);
-      try {
-        const proto = Object.getPrototypeOf(obj);
-        if (proto && proto !== Object.prototype) {
-          const pKeys = Object.getOwnPropertyNames(proto).filter(k => !builtins.has(k));
-          if (pKeys.length) {
-            lines.push('  proto keys:');
-            pKeys.forEach(k => {
-              let t = '?';
-              try { t = typeof proto[k]; } catch(e) { t = 'ERR'; }
-              lines.push('    ' + k + ' (' + t + ')');
-            });
-          }
-        }
-      } catch(e) {}
-      // try to get string representation
-      try {
-        const s = String(obj);
-        if (s !== '[object Object]') w('  str: ', s).forEach(l => lines.push(l));
-      } catch(e) {}
-    }
-
-    // Deep probes
-    probeObj('FlutterButtonHandler', window.FlutterButtonHandler);
-    probeObj('TouchEventHandler', window.TouchEventHandler);
-    probeObj('AccelerometerHandler', window.AccelerometerHandler);
-    probeObj('CreationStorageHandler', window.CreationStorageHandler);
-    probeObj('CreationVoiceHandler', window.CreationVoiceHandler);
-
-    // creationSensors
-    probeObj('creationSensors', window.creationSensors);
-
-    // Deep dive: creationSensors.accelerometer
-    if (window.creationSensors && window.creationSensors.accelerometer) {
-      const acc = window.creationSensors.accelerometer;
-      lines.push('--- accel deep ---');
-      const aKeys = Object.keys(acc);
-      aKeys.forEach(k => {
-        let t = '?', v = '';
-        try { t = typeof acc[k]; } catch(e) {}
-        try {
-          if (t === 'number') v = ' = ' + acc[k].toFixed(3);
-          else if (t === 'string') v = ' = "' + acc[k].slice(0,20) + '"';
-          else if (t === 'boolean') v = ' = ' + acc[k];
-        } catch(e) {}
-        lines.push('  ' + k + ' (' + t + ')' + v);
-      });
-    }
-
-    // Deep dive: creationStorage.plain and .secure
-    if (typeof creationStorage !== 'undefined') {
-      lines.push('--- cStorage shape ---');
-      ['plain','secure'].forEach(sub => {
-        if (creationStorage[sub]) {
-          const obj = creationStorage[sub];
-          lines.push(' .' + sub + ' typeof: ' + typeof obj);
-          const keys = Object.keys(obj);
-          if (keys.length) {
-            keys.forEach(k => {
-              let t = '?'; try { t = typeof obj[k]; } catch(e) {}
-              let v = '';
-              try {
-                if (t === 'string') v = '="' + obj[k].slice(0,20) + '"';
-                else if (t === 'number') v = '=' + obj[k];
-              } catch(e) {}
-              lines.push('   ' + k + '(' + t + ')' + v);
-            });
-          }
-          // Try proto methods
-          try {
-            const proto = Object.getPrototypeOf(obj);
-            if (proto && proto !== Object.prototype) {
-              const builtins2 = new Set(['constructor','__defineGetter__','__defineSetter__',
-                'hasOwnProperty','__lookupGetter__','__lookupSetter__','isPrototypeOf',
-                'propertyIsEnumerable','toString','valueOf','__proto__','toLocaleString']);
-              const pKeys = Object.getOwnPropertyNames(proto).filter(k => !builtins2.has(k));
-              if (pKeys.length) {
-                lines.push('   proto:');
-                pKeys.forEach(k => {
-                  let t = '?'; try { t = typeof proto[k]; } catch(e) {}
-                  lines.push('    ' + k + '(' + t + ')');
-                });
-              }
-            }
-          } catch(e) {}
-        } else {
-          lines.push(' .' + sub + ': missing');
-        }
-      });
-    }
-
-    // APIs
-    lines.push('--- APIS ---');
-    lines.push('SpeechRec: ' + (window.SpeechRecognition ? 'native' : window.webkitSpeechRecognition ? 'webkit' : 'NO'));
-    lines.push('MediaDevices: ' + (navigator.mediaDevices ? 'YES' : 'NO'));
-    lines.push('MediaRec: ' + (typeof MediaRecorder !== 'undefined' ? 'YES' : 'NO'));
-    lines.push('screen: ' + screen.width + 'x' + screen.height + ' dpr=' + devicePixelRatio);
-    lines.push('canvas: ' + W + 'x' + H);
-    lines.push('onPM set: ' + (typeof window.onPluginMessage === 'function' ? 'YES' : 'NO'));
+    // Status summary (2 lines)
+    const mr = typeof micReady !== 'undefined' ? micReady : 'N/A';
+    lines.push(VERSION + ' mic:' + (mr === true ? 'OK' : mr === false ? 'NO' : mr));
+    lines.push('voice:' + voiceState + ' step:' + (voiceStep || '-') + ' ' + emo.name);
 
     // Last STT/LLM
     const ls = window.__lepusState || {};
-    if (ls.lastTranscript) w('lastSTT: ', ls.lastTranscript).forEach(l => lines.push(l));
-    if (ls.lastReply) w('lastLLM: ', ls.lastReply).forEach(l => lines.push(l));
+    if (ls.lastTranscript) w('STT> ', ls.lastTranscript).forEach(l => lines.push(l));
+    if (ls.lastReply) w('LLM> ', ls.lastReply).forEach(l => lines.push(l));
 
-    // Pipeline log
-    if (pipeLog.length) {
-      lines.push('--- PIPELINE LOG ---');
+    // Pipeline log (the main content)
+    lines.push('--- LOG ---');
+    if (pipeLog.length === 0) {
+      lines.push('  (no events)');
+    } else {
       pipeLog.forEach(l => w('', l).forEach(wl => lines.push(wl)));
     }
 
