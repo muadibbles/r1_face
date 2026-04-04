@@ -662,17 +662,28 @@ window.FACE_EASINGS = {
 
     window.onPluginMessage = function(evt) {
       pipeLogPush('onPM fired! state=' + voiceState);
+      // Dump evt shape
+      var et = typeof evt;
+      try { pipeLogPush('et=' + et + ' k=' + Object.keys(evt).slice(0,6).join(',')); } catch(e2) {}
+      if (evt && evt.data !== undefined) {
+        pipeLogPush('d=' + typeof evt.data + ':' + String(evt.data).slice(0,50));
+      } else if (typeof evt === 'string') {
+        pipeLogPush('str:' + evt.slice(0,50));
+      } else {
+        pipeLogPush('no .data, evt=' + String(evt).slice(0,50));
+      }
       if (voiceState !== 'processing') return;
       clearTimeout(window.__lepusState.llmTimeout);
       clearTimeout(processingGuard);
       let reply = '';
       try {
-        const parsed = JSON.parse(evt.data);
-        reply = (parsed.response || parsed.message || '').trim();
-        pipeLogPush('llm parsed OK, len=' + reply.length);
+        var raw = (evt && evt.data !== undefined) ? evt.data : (typeof evt === 'string' ? evt : '');
+        var parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        reply = (parsed.response || parsed.message || parsed.text || parsed.reply || '').trim();
+        pipeLogPush('OK len=' + reply.length);
       } catch (e) {
-        reply = (evt.message || (typeof evt.data === 'string' ? evt.data : '') || '').trim();
-        pipeLogPush('llm parse fallback, len=' + reply.length);
+        reply = (typeof evt === 'string' ? evt : (evt && evt.message) || (evt && typeof evt.data === 'string' ? evt.data : '') || '').trim();
+        pipeLogPush('fallback len=' + reply.length);
       }
       voiceStep = '';
       if (!reply) {
