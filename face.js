@@ -563,6 +563,8 @@ window.FACE_EASINGS = {
 
     ctx.textAlign = 'left';
     ctx.fillText(VERSION, 4, H - 4);
+    // Mouth debug: show open value, target, queue length
+    ctx.fillText('m:' + mouth.open.toFixed(2) + ' t:' + mouth.target.toFixed(2) + ' q:' + mouth.queue.length + ' max:' + (emo.live.mouthOpenMax||0).toFixed(0) + ' th:' + (emo.live.mouthThickness||0).toFixed(1), 4, H - 16);
 
     ctx.textAlign = 'right';
     const voiceTag = voiceState !== 'idle'
