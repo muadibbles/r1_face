@@ -456,7 +456,7 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.056';
+  const VERSION = 'v0.057';
 
   // ── Pipeline error log (shown in diag) ────────────────────────────────
   const pipeLog = [];
@@ -676,18 +676,23 @@ window.FACE_EASINGS = {
     }
 
     window.onPluginMessage = function(evt) {
-      pipeLogPush('onPM! st=' + voiceState);
-      if (voiceState !== 'processing') return;
-      clearTimeout(window.__lepusState.llmTimeout);
-      clearTimeout(processingGuard);
-      voiceStep = '';
-      // R1 sends {message: "LLM_Response Available", pluginId: "..."}
-      // The actual reply text is NOT in the callback — R1 speaks it natively.
-      // So we start a generic mouth animation to match the TTS.
-      pipeLogPush('speaking (generic)');
-      voiceState = 'speaking';
-      window.__faceDebug.setEmotion('happy');
-      speakGeneric(8000);  // animate for ~8s (typical R1 response length)
+      try {
+        pipeLogPush('onPM! st=' + voiceState);
+        if (voiceState !== 'processing') return;
+        clearTimeout(window.__lepusState.llmTimeout);
+        clearTimeout(processingGuard);
+        voiceStep = '';
+        pipeLogPush('speaking (generic)');
+        voiceState = 'speaking';
+        window.__faceDebug.setEmotion('happy');
+        speakGeneric(8000);
+      } catch(e) {
+        pipeLogPush('onPM ERR: ' + e.message);
+        voiceState = 'speaking';
+        voiceStep = '';
+        window.__faceDebug.setEmotion('happy');
+        speakGeneric(8000);
+      }
     };
 
     // ── STT: MediaRecorder + Whisper ──────────────────────────────────────
