@@ -793,7 +793,7 @@ window.FACE_EASINGS = {
         const prompt = PROMPTS[promptIdx % PROMPTS.length];
         pipeLogPush('PTT → "' + prompt.slice(0, 25) + '"');
         voiceState = 'processing'; voiceStep = 'llm';
-        window.__faceDebug.setEmotion('thinking');
+        window.__faceDebug.setEmotion('attentive');
         startProcessingGuard();
         sendToLLM(prompt);
       });
