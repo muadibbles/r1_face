@@ -456,7 +456,7 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.053';
+  const VERSION = 'v0.054';
 
   // ── Pipeline error log (shown in diag) ────────────────────────────────
   const pipeLog = [];
