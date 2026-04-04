@@ -194,6 +194,10 @@
   }
 };
 </script>
-<script src="face.js?v=0.055"></script>
+<script>
+  var s = document.createElement('script');
+  s.src = 'face.js?t=' + Date.now();
+  document.body.appendChild(s);
+</script>
 </body>
 </html>
