@@ -467,7 +467,7 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.061';
+  const VERSION = 'v0.062';
 
   // ── Pipeline error log (shown in diag) ────────────────────────────────
   const pipeLog = [];
@@ -499,9 +499,13 @@ window.FACE_EASINGS = {
     const lines = [];
     const w = (pfx, val) => wrapLine(pfx, val, CW);
 
-    // Status summary (2 lines)
+    // Status summary
     lines.push(VERSION + ' ' + emo.name);
     lines.push('voice:' + voiceState + ' step:' + (voiceStep || '-'));
+    if (typeof sttProbeMode !== 'undefined' && sttProbeMode) {
+      lines.push('>>> STT PROBE MODE #' + sttProbeIdx + '/' + STT_PROBES.length);
+      lines.push('PTT=fire probe  side=close diag');
+    }
     // Show current prompt if available
     if (typeof promptIdx !== 'undefined' && typeof PROMPTS !== 'undefined') {
       const p = PROMPTS[promptIdx % PROMPTS.length];
@@ -697,8 +701,48 @@ window.FACE_EASINGS = {
       mouth.queue.push({ target: 0, hold: 300 });
     }
 
+    // ── STT Probe Mode ────────────────────────────────────────────────
+    let sttProbeMode = false;
+    let sttProbeIdx = 0;
+    const STT_PROBES = [
+      // Try telling R1 to listen / transcribe
+      { message: 'listen', useLLM: false },
+      { message: 'listen', useLLM: false, wantsR1Response: false },
+      { message: '', useLLM: false, listenForSpeech: true },
+      { message: '', useLLM: false, useSTT: true },
+      { message: '', useLLM: false, wantsUserInput: true },
+      { message: '', useLLM: false, captureAudio: true },
+      { message: '', useLLM: false, recordAudio: true },
+      { message: '', useLLM: false, startListening: true },
+      { message: '', useLLM: true, wantsR1Response: true, listenFirst: true },
+      { action: 'listen' },
+      { action: 'startListening' },
+      { action: 'captureAudio' },
+      { action: 'transcribe' },
+      { type: 'stt', action: 'start' },
+      { type: 'voice', action: 'listen' },
+      { command: 'listen' },
+      { command: 'startSTT' },
+      { command: 'record' },
+      { mode: 'listen' },
+      { mode: 'stt' },
+    ];
+
     window.onPluginMessage = function(evt) {
-      pipeLogPush('onPM! st=' + voiceState);
+      // Always log full response for probe analysis
+      try {
+        var keys = Object.keys(evt);
+        var summary = keys.map(function(k) { return k + '=' + String(evt[k]).slice(0, 30); }).join(' | ');
+        pipeLogPush('onPM: ' + summary.slice(0, 60));
+      } catch(e2) {
+        pipeLogPush('onPM: (parse err)');
+      }
+
+      if (sttProbeMode) {
+        pipeLogPush('PROBE response received!');
+        return;
+      }
+
       if (voiceState !== 'processing') return;
       clearTimeout(window.__lepusState.llmTimeout);
       clearTimeout(processingGuard);
@@ -728,7 +772,23 @@ window.FACE_EASINGS = {
       // processingGuard and startProcessingGuard hoisted to ON_R1 scope
 
       window.addEventListener('longPressStart', () => {
-        if (diagVisible) return;
+        // Toggle probe mode when diag is open
+        if (diagVisible) {
+          sttProbeMode = !sttProbeMode;
+          sttProbeIdx = 0;
+          pipeLogPush(sttProbeMode ? 'PROBE MODE ON' : 'PROBE MODE OFF');
+          return;
+        }
+
+        // STT probe mode: fire next probe payload
+        if (sttProbeMode) {
+          const probe = STT_PROBES[sttProbeIdx % STT_PROBES.length];
+          pipeLogPush('PROBE #' + sttProbeIdx + ': ' + JSON.stringify(probe).slice(0, 40));
+          PluginMessageHandler.postMessage(JSON.stringify(probe));
+          sttProbeIdx++;
+          return;
+        }
+
         if (voiceState !== 'idle') return;
         const prompt = PROMPTS[promptIdx % PROMPTS.length];
         pipeLogPush('PTT → "' + prompt.slice(0, 25) + '"');
