@@ -467,7 +467,7 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.060';
+  const VERSION = 'v0.061';
 
   // ── Pipeline error log (shown in diag) ────────────────────────────────
   const pipeLog = [];
@@ -574,8 +574,6 @@ window.FACE_EASINGS = {
 
     ctx.textAlign = 'left';
     ctx.fillText(VERSION, 4, H - 4);
-    // Mouth debug: show open value, target, queue length
-    ctx.fillText('m:' + mouth.open.toFixed(2) + ' t:' + mouth.target.toFixed(2) + ' q:' + mouth.queue.length + ' max:' + (emo.live.mouthOpenMax||0).toFixed(0) + ' th:' + (emo.live.mouthThickness||0).toFixed(1), 4, H - 16);
 
     ctx.textAlign = 'right';
     const voiceTag = voiceState !== 'idle'
@@ -735,8 +733,7 @@ window.FACE_EASINGS = {
         const prompt = PROMPTS[promptIdx % PROMPTS.length];
         pipeLogPush('PTT → "' + prompt.slice(0, 25) + '"');
         voiceState = 'processing'; voiceStep = 'llm';
-        window.__faceDebug.setEmotion('attentive');
-        speakGeneric(6000);  // animate mouth during R1 "searching..." announcement
+        window.__faceDebug.setEmotion('thinking');
         startProcessingGuard();
         sendToLLM(prompt);
       });
