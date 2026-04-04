@@ -456,7 +456,7 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.057';
+  const VERSION = 'v0.058';
 
   // ── Pipeline error log (shown in diag) ────────────────────────────────
   const pipeLog = [];
@@ -636,6 +636,17 @@ window.FACE_EASINGS = {
 
     // ── Shared: LLM call + response handler ─────────────────────────────
     window.__lepusState = window.__lepusState || {};
+    let processingGuard = null;
+    function startProcessingGuard() {
+      clearTimeout(processingGuard);
+      processingGuard = setTimeout(() => {
+        if (voiceState === 'processing') {
+          pipeLogPush('SAFETY: 20s guard reset');
+          voiceState = 'idle'; voiceStep = '';
+          window.__faceDebug.setEmotion('neutral');
+        }
+      }, 20000);
+    }
 
     function sendToLLM(transcript) {
       const emotionCtx  = `Your face is currently expressing: ${emo.name}`;
@@ -677,26 +688,14 @@ window.FACE_EASINGS = {
 
     window.onPluginMessage = function(evt) {
       pipeLogPush('onPM! st=' + voiceState);
-      pipeLogPush('fn:speakG=' + typeof speakGeneric + ' guard=' + typeof processingGuard);
-      pipeLogPush('lepus=' + typeof window.__lepusState + ' debug=' + typeof window.__faceDebug);
-      try {
-        if (voiceState !== 'processing') { pipeLogPush('SKIP: not processing'); return; }
-        pipeLogPush('A: clearing timeouts');
-        clearTimeout(window.__lepusState.llmTimeout);
-        clearTimeout(processingGuard);
-        pipeLogPush('B: setting state');
-        voiceState = 'speaking';
-        voiceStep = '';
-        pipeLogPush('C: setEmotion');
-        window.__faceDebug.setEmotion('happy');
-        pipeLogPush('D: speakGeneric');
-        speakGeneric(8000);
-        pipeLogPush('E: done!');
-      } catch(e) {
-        pipeLogPush('ERR: ' + e.message + ' @' + e.stack.split('\n')[1].slice(-30));
-        voiceState = 'idle';
-        voiceStep = '';
-      }
+      if (voiceState !== 'processing') return;
+      clearTimeout(window.__lepusState.llmTimeout);
+      clearTimeout(processingGuard);
+      voiceStep = '';
+      voiceState = 'speaking';
+      window.__faceDebug.setEmotion('happy');
+      speakGeneric(8000);
+      pipeLogPush('speaking (generic 8s)');
     };
 
     // ── STT: MediaRecorder + Whisper ──────────────────────────────────────
@@ -715,18 +714,7 @@ window.FACE_EASINGS = {
       ];
       let promptIdx = 0;
 
-      // Global safety: if stuck in processing for >20s, force reset
-      let processingGuard = null;
-      function startProcessingGuard() {
-        clearTimeout(processingGuard);
-        processingGuard = setTimeout(() => {
-          if (voiceState === 'processing') {
-            pipeLogPush('SAFETY: 20s guard reset');
-            voiceState = 'idle'; voiceStep = '';
-            window.__faceDebug.setEmotion('neutral');
-          }
-        }, 20000);
-      }
+      // processingGuard and startProcessingGuard hoisted to ON_R1 scope
 
       window.addEventListener('longPressStart', () => {
         if (diagVisible) return;
