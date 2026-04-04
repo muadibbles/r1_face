@@ -456,7 +456,7 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.054';
+  const VERSION = 'v0.055';
 
   // ── Pipeline error log (shown in diag) ────────────────────────────────
   const pipeLog = [];
@@ -662,28 +662,21 @@ window.FACE_EASINGS = {
 
     window.onPluginMessage = function(evt) {
       pipeLogPush('onPM fired! state=' + voiceState);
-      // Dump evt shape
-      var et = typeof evt;
-      try { pipeLogPush('et=' + et + ' k=' + Object.keys(evt).slice(0,6).join(',')); } catch(e2) {}
-      if (evt && evt.data !== undefined) {
-        pipeLogPush('d=' + typeof evt.data + ':' + String(evt.data).slice(0,50));
-      } else if (typeof evt === 'string') {
-        pipeLogPush('str:' + evt.slice(0,50));
-      } else {
-        pipeLogPush('no .data, evt=' + String(evt).slice(0,50));
-      }
       if (voiceState !== 'processing') return;
       clearTimeout(window.__lepusState.llmTimeout);
       clearTimeout(processingGuard);
+      // evt is {message, pluginId} — reply text is in evt.message directly
       let reply = '';
       try {
-        var raw = (evt && evt.data !== undefined) ? evt.data : (typeof evt === 'string' ? evt : '');
-        var parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        reply = (parsed.response || parsed.message || parsed.text || parsed.reply || '').trim();
-        pipeLogPush('OK len=' + reply.length);
+        if (evt && typeof evt.message === 'string') {
+          reply = evt.message.trim();
+        } else if (evt && evt.data) {
+          var parsed = typeof evt.data === 'string' ? JSON.parse(evt.data) : evt.data;
+          reply = (parsed.response || parsed.message || '').trim();
+        }
+        pipeLogPush('reply len=' + reply.length);
       } catch (e) {
-        reply = (typeof evt === 'string' ? evt : (evt && evt.message) || (evt && typeof evt.data === 'string' ? evt.data : '') || '').trim();
-        pipeLogPush('fallback len=' + reply.length);
+        pipeLogPush('parse err: ' + e.message);
       }
       voiceStep = '';
       if (!reply) {
