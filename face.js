@@ -661,18 +661,37 @@ window.FACE_EASINGS = {
     }
 
     window.onPluginMessage = function(evt) {
-      pipeLogPush('onPM fired! state=' + voiceState);
+      pipeLogPush('onPM! st=' + voiceState);
+      // Dump all keys and values for debugging
+      try {
+        var keys = Object.keys(evt);
+        for (var i = 0; i < keys.length; i++) {
+          var k = keys[i];
+          var v = String(evt[k]).slice(0, 40);
+          pipeLogPush('  ' + k + '=' + v);
+        }
+      } catch(e2) {}
       if (voiceState !== 'processing') return;
       clearTimeout(window.__lepusState.llmTimeout);
       clearTimeout(processingGuard);
-      // evt is {message, pluginId} — reply text is in evt.message directly
+      // Try every possible field for the reply
       let reply = '';
       try {
-        if (evt && typeof evt.message === 'string') {
-          reply = evt.message.trim();
-        } else if (evt && evt.data) {
-          var parsed = typeof evt.data === 'string' ? JSON.parse(evt.data) : evt.data;
-          reply = (parsed.response || parsed.message || '').trim();
+        // Try evt.message first (could be echo), then evt.data parsed
+        var candidates = [evt.response, evt.text, evt.reply, evt.result, evt.answer];
+        if (evt.data) {
+          try {
+            var parsed = typeof evt.data === 'string' ? JSON.parse(evt.data) : evt.data;
+            candidates.push(parsed.response, parsed.message, parsed.text, parsed.reply);
+          } catch(e3) {}
+        }
+        // evt.message last — might be our echo
+        candidates.push(evt.message);
+        for (var j = 0; j < candidates.length; j++) {
+          if (typeof candidates[j] === 'string' && candidates[j].trim().length > 0) {
+            reply = candidates[j].trim();
+            break;
+          }
         }
         pipeLogPush('reply len=' + reply.length);
       } catch (e) {
