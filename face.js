@@ -456,7 +456,7 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.052';
+  const VERSION = 'v0.053';
 
   // ── Pipeline error log (shown in diag) ────────────────────────────────
   const pipeLog = [];
@@ -489,9 +489,13 @@ window.FACE_EASINGS = {
     const w = (pfx, val) => wrapLine(pfx, val, CW);
 
     // Status summary (2 lines)
-    const mr = typeof micReady !== 'undefined' ? micReady : 'N/A';
-    lines.push(VERSION + ' mic:' + (mr === true ? 'OK' : mr === false ? 'NO' : mr));
-    lines.push('voice:' + voiceState + ' step:' + (voiceStep || '-') + ' ' + emo.name);
+    lines.push(VERSION + ' ' + emo.name);
+    lines.push('voice:' + voiceState + ' step:' + (voiceStep || '-'));
+    // Show current prompt if available
+    if (typeof promptIdx !== 'undefined' && typeof PROMPTS !== 'undefined') {
+      const p = PROMPTS[promptIdx % PROMPTS.length];
+      w('PTT> ', p).forEach(l => lines.push(l));
+    }
 
     // Last STT/LLM
     const ls = window.__lepusState || {};
@@ -684,256 +688,46 @@ window.FACE_EASINGS = {
 
     // ── STT: MediaRecorder + Whisper ──────────────────────────────────────
     {
-      // Whisper endpoints — try in order, fall back on failure
-      const WHISPER_ENDPOINTS = [
-        'https://masatrad-whisper.hf.space/asr?output=txt&language=en',
-        'https://sanchit-gandhi-whisper-large-v2.hf.space/asr?output=txt&language=en',
+      // ── PTT → LLM (no mic — getUserMedia blocked on R1 WebView) ────────
+      // Press PTT to send current prompt to LLM. Scroll to change prompt.
+      const PROMPTS = [
+        "Tell me something interesting",
+        "What are you thinking about?",
+        "Tell me a joke",
+        "What's the meaning of life?",
+        "Describe what you see",
+        "How are you feeling right now?",
+        "Say something surprising",
+        "What's your favorite thing about being an AI?",
       ];
-      let activeEndpoint = 0;
+      let promptIdx = 0;
 
-      // Warmup: wake HuggingFace spaces (they sleep after 5 min idle)
-      function warmupWhisper() {
-        WHISPER_ENDPOINTS.forEach(ep => {
-          const base = ep.split('/asr')[0] + '/';
-          fetch(base, { method: 'GET', mode: 'no-cors' }).catch(() => {});
-        });
-      }
-      warmupWhisper();
-      // Re-warm every 4 minutes to prevent sleep
-      setInterval(warmupWhisper, 240000);
-
-      // Pick best MIME type for this WebView
-      const MIME_CANDIDATES = [
-        'audio/webm;codecs=opus',
-        'audio/webm',
-        'audio/ogg;codecs=opus',
-        'audio/mp4',
-      ];
-      let recorderMime = '';
-      for (const m of MIME_CANDIDATES) {
-        if (MediaRecorder.isTypeSupported(m)) { recorderMime = m; break; }
-      }
-      if (!recorderMime) recorderMime = ''; // let browser pick default
-      pipeLogPush('mime: ' + (recorderMime || 'default'));
-
-      // ── Mic acquisition: first PTT acquires, then kept alive ──────────
-      let micStream = null;
-      let micReady  = false;
-      let micAcquiring = false;
-      let pendingRelease = false;  // PTT released while mic still acquiring
-      let recorder = null, audioChunks = [], recordTimer = null;
-      const MAX_RECORD_MS = 30000;
-
-      // Global safety: if stuck in processing for >30s, force reset
+      // Global safety: if stuck in processing for >20s, force reset
       let processingGuard = null;
       function startProcessingGuard() {
         clearTimeout(processingGuard);
         processingGuard = setTimeout(() => {
           if (voiceState === 'processing') {
-            pipeLogPush('SAFETY: 30s guard reset');
+            pipeLogPush('SAFETY: 20s guard reset');
             voiceState = 'idle'; voiceStep = '';
             window.__faceDebug.setEmotion('neutral');
           }
-        }, 30000);
-      }
-
-      function acquireMic() {
-        if (micAcquiring) return;
-        micAcquiring = true;
-        pendingRelease = false;
-        pipeLogPush('mic: acquiring...');
-        voiceState = 'listening';
-        window.__faceDebug.setEmotion('attentive');
-
-        // getUserMedia hangs forever on R1 if permissions blocked — race with timeout
-        const micTimeout = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('getUserMedia timeout (8s)')), 8000)
-        );
-
-        Promise.race([
-          navigator.mediaDevices.getUserMedia({ audio: true }),
-          micTimeout
-        ]).then(stream => {
-          micStream = stream;
-          micReady = true;
-          micAcquiring = false;
-          pipeLogPush('mic: READY');
-
-          if (pendingRelease) {
-            pipeLogPush('PTT already released. Hold PTT again.');
-            voiceState = 'idle';
-            window.__faceDebug.setEmotion('neutral');
-            return;
-          }
-
-          startRecording();
-        }).catch(e => {
-          micAcquiring = false;
-          pipeLogPush('mic FAIL: ' + e.message);
-          voiceState = 'idle';
-          window.__faceDebug.setEmotion('neutral');
-        });
-      }
-
-      function createRecorder() {
-        if (!micStream) return null;
-        const opts = recorderMime ? { mimeType: recorderMime } : {};
-        let rec;
-        try {
-          rec = new MediaRecorder(micStream, opts);
-        } catch(e) {
-          pipeLogPush('MR fallback: ' + e.message);
-          rec = new MediaRecorder(micStream);
-        }
-        return rec;
-      }
-
-      function startRecording() {
-        audioChunks = [];
-        recorder = createRecorder();
-        if (!recorder) {
-          pipeLogPush('recorder creation failed');
-          voiceState = 'idle';
-          window.__faceDebug.setEmotion('neutral');
-          return;
-        }
-
-        recorder.ondataavailable = e => {
-          if (e.data.size > 0) audioChunks.push(e.data);
-          pipeLogPush('chunk: ' + e.data.size + 'b');
-        };
-
-        recorder.onstop = async () => {
-          pipeLogPush('onstop, chunks=' + audioChunks.length);
-          const mimeUsed = recorder.mimeType || 'audio/webm';
-          const blob = new Blob(audioChunks, { type: mimeUsed });
-          pipeLogPush('blob: ' + blob.size + 'b');
-          if (blob.size < 100) {
-            pipeLogPush('WARN: blob too small');
-            voiceState = 'idle'; voiceStep = '';
-            window.__faceDebug.setEmotion('neutral');
-            return;
-          }
-          const transcript = await transcribeAudio(blob);
-          window.__lepusState.lastTranscript = transcript;
-          pipeLogPush('stt: "' + (transcript || '(empty)').slice(0,40) + '"');
-          if (!transcript) {
-            voiceState = 'idle'; voiceStep = '';
-            window.__faceDebug.setEmotion('neutral');
-            return;
-          }
-          sendToLLM(transcript);
-        };
-
-        recorder.onerror = (e) => {
-          pipeLogPush('REC ERR: ' + (e.error ? e.error.name : 'unknown'));
-          voiceState = 'idle'; voiceStep = '';
-          window.__faceDebug.setEmotion('neutral');
-        };
-
-        recorder.start(500);
-        pipeLogPush('recording...');
-        recordTimer = setTimeout(() => finishRecording(), MAX_RECORD_MS);
+        }, 20000);
       }
 
       window.addEventListener('longPressStart', () => {
         if (diagVisible) return;
         if (voiceState !== 'idle') return;
-
-        // First press: acquire mic (needs user gesture on Chrome 101)
-        if (!micReady || !micStream) {
-          acquireMic();  // will call startRecording() when ready
-          return;
-        }
-
-        // Check mic stream is still alive
-        const track = micStream.getAudioTracks()[0];
-        if (!track || track.readyState === 'ended') {
-          pipeLogPush('PTT: mic track dead, re-acquiring');
-          micReady = false;
-          acquireMic();  // will start recording when ready
-          return;
-        }
-
-        // Mic ready — start recording immediately
-        voiceState = 'listening';
-        window.__faceDebug.setEmotion('attentive');
-        startRecording();
-      });
-
-      function finishRecording() {
-        if (voiceState !== 'listening') return;
-        clearTimeout(recordTimer);
-        voiceState = 'processing'; voiceStep = 'stt';
+        const prompt = PROMPTS[promptIdx % PROMPTS.length];
+        pipeLogPush('PTT → "' + prompt.slice(0, 25) + '"');
+        voiceState = 'processing'; voiceStep = 'llm';
         window.__faceDebug.setEmotion('thinking');
         startProcessingGuard();
-        if (recorder && recorder.state === 'recording') {
-          recorder.requestData();
-          recorder.stop();
-          pipeLogPush('recorder stopped');
-        } else {
-          pipeLogPush('WARN: recorder not recording (' + (recorder ? recorder.state : 'null') + ')');
-          voiceState = 'idle'; voiceStep = '';
-          window.__faceDebug.setEmotion('neutral');
-        }
-      }
-
-      window.addEventListener('longPressEnd', () => {
-        clearTimeout(recordTimer);
-        if (voiceState !== 'listening') return;
-
-        // If mic is still being acquired, flag it
-        if (micAcquiring) {
-          pipeLogPush('PTT released (mic still acquiring)');
-          pendingRelease = true;
-          return;
-        }
-
-        pipeLogPush('PTT released');
-        finishRecording();
+        sendToLLM(prompt);
       });
 
-      async function transcribeAudio(blob) {
-        const TIMEOUT_MS = 12000;  // 12s per endpoint (was 25s — too long)
-
-        for (let i = 0; i < WHISPER_ENDPOINTS.length; i++) {
-          const epIdx = (activeEndpoint + i) % WHISPER_ENDPOINTS.length;
-          const url = WHISPER_ENDPOINTS[epIdx];
-          const dead = new Promise(resolve => setTimeout(() => resolve(null), TIMEOUT_MS));
-
-          try {
-            const fd = new FormData();
-            const ext = blob.type.includes('ogg') ? 'audio.ogg' : blob.type.includes('mp4') ? 'audio.mp4' : 'audio.webm';
-            fd.append('audio_file', blob, ext);
-
-            pipeLogPush('whisper[' + epIdx + '] POST ' + blob.size + 'b');
-            const fetchP = fetch(url, { method: 'POST', body: fd })
-              .then(r => {
-                pipeLogPush('whisper[' + epIdx + '] HTTP ' + r.status);
-                if (!r.ok) throw new Error('HTTP ' + r.status);
-                return r.text();
-              });
-
-            const result = await Promise.race([fetchP, dead]);
-            if (result === null) {
-              pipeLogPush('whisper[' + epIdx + '] TIMEOUT ' + TIMEOUT_MS + 'ms');
-              continue;
-            }
-            const text = (result || '').trim();
-            if (text) {
-              activeEndpoint = epIdx;
-              pipeLogPush('whisper OK: "' + text.slice(0,30) + '"');
-              return text;
-            }
-            pipeLogPush('whisper[' + epIdx + '] empty body');
-          } catch (e) {
-            pipeLogPush('whisper[' + epIdx + '] ERR: ' + e.message.slice(0,50));
-            continue;
-          }
-        }
-        pipeLogPush('ALL whisper failed');
-        return '';
-      }
+      // Scroll changes prompt (when not in diag mode)
+      // (existing scroll handlers already guard with diagVisible)
     }
   }
 
