@@ -456,7 +456,7 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.051';
+  const VERSION = 'v0.052';
 
   // ── Pipeline error log (shown in diag) ────────────────────────────────
   const pipeLog = [];
@@ -741,30 +741,35 @@ window.FACE_EASINGS = {
         if (micAcquiring) return;
         micAcquiring = true;
         pendingRelease = false;
-        pipeLogPush('mic: acquiring (user gesture)...');
+        pipeLogPush('mic: acquiring...');
         voiceState = 'listening';
         window.__faceDebug.setEmotion('attentive');
-        navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+
+        // getUserMedia hangs forever on R1 if permissions blocked — race with timeout
+        const micTimeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('getUserMedia timeout (8s)')), 8000)
+        );
+
+        Promise.race([
+          navigator.mediaDevices.getUserMedia({ audio: true }),
+          micTimeout
+        ]).then(stream => {
           micStream = stream;
           micReady = true;
           micAcquiring = false;
           pipeLogPush('mic: READY');
 
           if (pendingRelease) {
-            // PTT was already released while we were acquiring.
-            // Record a brief clip (1.5s) so user hears confirmation on next try.
-            pipeLogPush('mic ready but PTT already released');
-            pipeLogPush('Mic acquired! Hold PTT again to talk.');
+            pipeLogPush('PTT already released. Hold PTT again.');
             voiceState = 'idle';
             window.__faceDebug.setEmotion('neutral');
             return;
           }
 
-          // Mic is now ready — start recording for this PTT press
           startRecording();
         }).catch(e => {
           micAcquiring = false;
-          pipeLogPush('mic ERR: ' + e.message);
+          pipeLogPush('mic FAIL: ' + e.message);
           voiceState = 'idle';
           window.__faceDebug.setEmotion('neutral');
         });
