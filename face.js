@@ -456,7 +456,7 @@ window.FACE_EASINGS = {
   let voiceState = 'idle';
   let voiceStep  = '';   // 'stt' | 'llm' — visible sub-state during processing
 
-  const VERSION = 'v0.049';
+  const VERSION = 'v0.050';
 
   // ── Pipeline error log (shown in diag) ────────────────────────────────
   const pipeLog = [];
@@ -874,6 +874,7 @@ window.FACE_EASINGS = {
       let micStream = null;
       let micReady  = false;
       let micAcquiring = false;
+      let pendingRelease = false;  // PTT released while mic still acquiring
       let recorder = null, audioChunks = [], recordTimer = null;
       const MAX_RECORD_MS = 30000;
 
@@ -893,6 +894,7 @@ window.FACE_EASINGS = {
       function acquireMic() {
         if (micAcquiring) return;
         micAcquiring = true;
+        pendingRelease = false;
         pipeLogPush('mic: acquiring (user gesture)...');
         voiceState = 'listening';
         window.__faceDebug.setEmotion('attentive');
@@ -901,7 +903,18 @@ window.FACE_EASINGS = {
           micReady = true;
           micAcquiring = false;
           pipeLogPush('mic: READY');
-          // Mic is now ready — start recording immediately for this PTT press
+
+          if (pendingRelease) {
+            // PTT was already released while we were acquiring.
+            // Record a brief clip (1.5s) so user hears confirmation on next try.
+            pipeLogPush('mic ready but PTT already released');
+            pipeLogPush('Mic acquired! Hold PTT again to talk.');
+            voiceState = 'idle';
+            window.__faceDebug.setEmotion('neutral');
+            return;
+          }
+
+          // Mic is now ready — start recording for this PTT press
           startRecording();
         }).catch(e => {
           micAcquiring = false;
@@ -1017,6 +1030,14 @@ window.FACE_EASINGS = {
       window.addEventListener('longPressEnd', () => {
         clearTimeout(recordTimer);
         if (voiceState !== 'listening') return;
+
+        // If mic is still being acquired, flag it
+        if (micAcquiring) {
+          pipeLogPush('PTT released (mic still acquiring)');
+          pendingRelease = true;
+          return;
+        }
+
         pipeLogPush('PTT released');
         finishRecording();
       });
